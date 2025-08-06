@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Speech-to-Text Interview System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+            background: #fafafa;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #4f46e5;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .question-section {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        }
+
+        .answer-section {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        }
+
+        .transcript-section {
+            background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(107, 114, 128, 0.3);
+        }
+
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #ef4444;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .pulse {
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .transcript-display {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .interim-text {
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        .final-text {
+            color: #1f2937;
+        }
+
+        .confidence-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 5px;
+        }
+
+        .confidence-high { background: #10b981; }
+        .confidence-medium { background: #f59e0b; }
+        .confidence-low { background: #ef4444; }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+
+        .language-select {
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            font-size: 0.9rem;
+        }
+
+        .export-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .word-count {
+            font-weight: 600;
+            color: #4f46e5;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #dc2626;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .success-message {
+            background: #f0fdf4;
+            color: #16a34a;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #16a34a;
+            margin: 15px 0;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 20px;
+            }
+            
+            .section {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+                margin-right: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Interview Assistant</h1>
+            <p>AI-Powered Speech-to-Text System for Real-time Interviews</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Question Generation Section -->
+            <div class="section question-section">
+                <h2 class="section-title">
+                    ❓ Question Generation
+                </h2>
+                <div class="input-group">
+                    <label for="questionInput">Enter your interview question:</label>
+                    <textarea id="questionInput" class="input-field" rows="3" 
+                              placeholder="Type your interview question here..."></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="speakQuestion()">
+                    🔊 Speak Question
+                </button>
+                <button class="btn btn-secondary" onclick="stopSpeaking()">
+                    ⏹️ Stop Speaking
+                </button>
+            </div>
+
+            <!-- Speech Recognition Section -->
+            <div class="section answer-section">
+                <h2 class="section-title">
+                    🗣️ Answer Recording
+                </h2>
+
+                <!-- Permission Status Check -->
+                <div id="permissionStatus" style="margin-bottom: 20px;">
+                    <button class="btn btn-secondary" onclick="checkMicrophoneStatus()">
+                        🔍 Check Microphone Status
+                    </button>
+                </div>
+                
+                <div class="status-bar">
+                    <div>
+                        <span>Language: </span>
+                        <select id="languageSelect" class="language-select">
+                            <option value="en-US">English (US)</option>
+                            <option value="en-GB">English (UK)</option>
+                            <option value="en-IN">English (India)</option>
+                            <option value="es-ES">Spanish</option>
+                            <option value="fr-FR">French</option>
+                            <option value="de-DE">German</option>
+                            <option value="zh-CN">Chinese (Mandarin)</option>
+                            <option value="ja-JP">Japanese</option>
+                            <option value="ko-KR">Korean</option>
+                        </select>
+                    </div>
+                    <div>Status: <span id="statusText">Ready</span></div>
+                    <div>Words: <span id="wordCount" class="word-count">0</span></div>
+                </div>
+
+                <div class="recording-indicator" id="recordingIndicator">
+                    <div class="pulse"></div>
+                    <span>Recording in progress... Speak clearly into your microphone</span>
+                </div>
+
+                <div class="error-message" id="errorMessage"></div>
+                <div class="success-message" id="successMessage"></div>
+
+                <!-- Microphone Permission Helper -->
+                <div id="micPermissionHelper" style="display: none; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                    <h4 style="color: #92400e; margin-bottom: 15px;">🎤 Microphone Permission Needed</h4>
+                    <p style="color: #92400e; margin-bottom: 15px;">To use speech recognition, please allow microphone access:</p>
+                    <ol style="color: #92400e; margin-bottom: 15px; padding-left: 20px;">
+                        <li>Look for the microphone icon (🎤) in your browser's address bar</li>
+                        <li>Click on it and select "Allow"</li>
+                        <li>Refresh the page if needed</li>
+                        <li>Try recording again</li>
+                    </ol>
+                    <button class="btn btn-primary" onclick="requestMicrophoneAccess().then(() => { hideMicHelper(); showSuccess('Microphone access granted! You can now start recording.'); }).catch(e => showError(e.message))">
+                        🔄 Request Microphone Access
+                    </button>
+                    <button class="btn btn-secondary" onclick="hideMicHelper()">
+                        ❌ Dismiss
+                    </button>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <button class="btn btn-success" id="startBtn" onclick="startRecording()">
+                        🎙️ Start Recording
+                    </button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopRecording()" disabled>
+                        ⏹️ Stop Recording
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearTranscript()">
+                        🗑️ Clear Transcript
+                    </button>
+                </div>
+            </div>
+
+            <!-- Transcript Display Section -->
+            <div class="section transcript-section">
+                <h2 class="section-title">
+                    📝 Live Transcript
+                </h2>
+                <div id="transcript" class="transcript-display">
+                    Start recording to see the live transcript here...
+                </div>
+
+                <div class="export-section">
+                    <h3 style="margin-bottom: 15px; color: #4f46e5;">📊 Export & Analysis</h3>
+                    <button class="btn btn-primary" onclick="downloadTranscript()">
+                        💾 Download Transcript
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyTranscript()">
+                        📋 Copy to Clipboard
+                    </button>
+                    <button class="btn btn-primary" onclick="analyzeResponse()">
+                        🔍 Analyze Response
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let recognition;
+        let isRecording = false;
+        let finalTranscript = '';
+        let interimTranscript = '';
+        let speechSynthesis = window.speechSynthesis;
+        let currentUtterance = null;
+
+        // Initialize the application
+        function initializeApp() {
+            checkBrowserSupport();
+            setupSpeechRecognition();
+            updateUI();
+            
+            // Auto-check microphone status on load
+            setTimeout(checkMicrophoneStatus, 1000);
+        }
+
+        // Check browser support
+        function checkBrowserSupport() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                showError('Your browser does not support speech recognition. Please use Chrome, Edge, or Safari.');
+                return false;
+            }
+
+            if (!('speechSynthesis' in window)) {
+                showError('Your browser does not support speech synthesis.');
+                return false;
+            }
+
+            return true;
+        }
+
+        // Setup speech recognition
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+
+            // Configure recognition settings
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 3;
+            recognition.lang = document.getElementById('languageSelect').value;
+
+            // Event handlers
+            recognition.onstart = handleRecognitionStart;
+            recognition.onresult = handleRecognitionResult;
+            recognition.onerror = handleRecognitionError;
+            recognition.onend = handleRecognitionEnd;
+        }
+
+        // Speech recognition event handlers
+        function handleRecognitionStart() {
+            isRecording = true;
+            updateUI();
+            updateStatus('Listening...');
+            showSuccess('Recording started successfully!');
+        }
+
+        function handleRecognitionResult(event) {
+            interimTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                const transcript = result[0].transcript;
+                const confidence = result[0].confidence;
+                
+                if (result.isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+            
+            updateTranscriptDisplay();
+            updateWordCount();
+        }
+
+        function handleRecognitionError(event) {
+            console.error('Speech recognition error:', event.error);
+            let errorMsg = 'An error occurred during speech recognition: ';
+            
+            switch(event.error) {
+                case 'no-speech':
+                    errorMsg += 'No speech detected. Please try speaking clearly.';
+                    break;
+                case 'audio-capture':
+                    errorMsg += 'No microphone found or microphone access denied.';
+                    showMicHelper();
+                    break;
+                case 'not-allowed':
+                    errorMsg += 'Microphone access denied. Please allow microphone access.';
+                    showMicHelper();
+                    break;
+                case 'network':
+                    errorMsg += 'Network error occurred. Please check your connection.';
+                    break;
+                default:
+                    errorMsg += event.error;
+            }
+            
+            showError(errorMsg);
+            stopRecording();
+        }
+
+        function handleRecognitionEnd() {
+            if (isRecording) {
+                // Auto-restart if we're still supposed to be recording
+                setTimeout(() => {
+                    if (isRecording) {
+                        recognition.start();
+                    }
+                }, 100);
+            } else {
+                updateStatus('Ready');
+                updateUI();
+            }
+        }
+
+        // Recording control functions
+        async function startRecording() {
+            if (!checkBrowserSupport()) return;
+            
+            // First, request microphone permission explicitly
+            try {
+                await requestMicrophoneAccess();
+                recognition.lang = document.getElementById('languageSelect').value;
+                recognition.start();
+                hideMessages();
+            } catch (error) {
+                showError('Failed to start recording: ' + error.message);
+                checkMicrophoneStatus(); // Show detailed status
+            }
+        }
+
+        // Check microphone status and permissions
+        async function checkMicrophoneStatus() {
+            const statusDiv = document.getElementById('permissionStatus');
+            
+            try {
+                // Check if getUserMedia is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    statusDiv.innerHTML = `
+                        <div style="background: #fef2f2; color: #dc2626; padding: 15px; border-radius: 10px; border-left: 4px solid #dc2626;">
+                            ❌ <strong>Not Supported:</strong> Your browser doesn't support microphone access. Please use Chrome, Firefox, Safari, or Edge with HTTPS.
+                        </div>`;
+                    return;
+                }
+
+                // Check current permission state
+                const permission = await navigator.permissions.query({ name: 'microphone' });
+                
+                let statusHTML = '';
+                switch (permission.state) {
+                    case 'granted':
+                        statusHTML = `
+                            <div style="background: #f0fdf4; color: #16a34a; padding: 15px; border-radius: 10px; border-left: 4px solid #16a34a;">
+                                ✅ <strong>Microphone Access:</strong> Granted! You should be able to record.
+                            </div>`;
+                        
+                        // Test actual microphone access
+                        try {
+                            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            stream.getTracks().forEach(track => track.stop());
+                            statusHTML += `
+                                <div style="background: #f0fdf4; color: #16a34a; padding: 15px; border-radius: 10px; border-left: 4px solid #16a34a; margin-top: 10px;">
+                                    ✅ <strong>Microphone Test:</strong> Working perfectly!
+                                </div>`;
+                        } catch (testError) {
+                            statusHTML += `
+                                <div style="background: #fef2f2; color: #dc2626; padding: 15px; border-radius: 10px; border-left: 4px solid #dc2626; margin-top: 10px;">
+                                    ❌ <strong>Microphone Test Failed:</strong> ${testError.message}
+                                </div>`;
+                        }
+                        break;
+                        
+                    case 'denied':
+                        statusHTML = `
+                            <div style="background: #fef2f2; color: #dc2626; padding: 15px; border-radius: 10px; border-left: 4px solid #dc2626;">
+                                ❌ <strong>Permission Denied:</strong> Microphone access has been blocked.
+                                <br><strong>Fix:</strong> Click the 🎤 or 🔒 icon in your address bar and allow microphone access.
+                            </div>`;
+                        break;
+                        
+                    case 'prompt':
+                        statusHTML = `
+                            <div style="background: #fef3c7; color: #92400e; padding: 15px; border-radius: 10px; border-left: 4px solid #f59e0b;">
+                                ⏳ <strong>Permission Required:</strong> Browser will ask for microphone access.
+                                <br><button class="btn btn-primary" onclick="requestMicrophoneAccess()" style="margin-top: 10px;">Request Access Now</button>
+                            </div>`;
+                        break;
+                }
+                
+                statusDiv.innerHTML = statusHTML;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div style="background: #fef2f2; color: #dc2626; padding: 15px; border-radius: 10px; border-left: 4px solid #dc2626;">
+                        ❌ <strong>Error checking permissions:</strong> ${error.message}
+                    </div>`;
+            }
+        }
+
+        // Direct microphone access request
+        async function requestMicrophoneAccess() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                stream.getTracks().forEach(track => track.stop());
+                showSuccess('✅ Microphone access granted! You can now start recording.');
+                checkMicrophoneStatus(); // Refresh status
+            } catch (error) {
+                let errorMessage = '';
+                switch (error.name) {
+                    case 'NotAllowedError':
+                        errorMessage = 'Permission denied. Please click the microphone icon in your address bar and select "Allow".';
+                        break;
+                    case 'NotFoundError':
+                        errorMessage = 'No microphone found. Please connect a microphone and try again.';
+                        break;
+                    case 'NotSupportedError':
+                        errorMessage = 'Microphone not supported. Please use HTTPS and a modern browser.';
+                        break;
+                    default:
+                        errorMessage = error.message;
+                }
+                showError('❌ Failed to access microphone: ' + errorMessage);
+            }
+        }
+
+        function stopRecording() {
+            if (recognition && isRecording) {
+                isRecording = false;
+                recognition.stop();
+                updateStatus('Processing...');
+                setTimeout(() => {
+                    updateStatus('Ready');
+                    updateUI();
+                }, 1000);
+            }
+        }
+
+        // Text-to-speech functions
+        function speakQuestion() {
+            const questionText = document.getElementById('questionInput').value.trim();
+            
+            if (!questionText) {
+                showError('Please enter a question to speak.');
+                return;
+            }
+
+            if (currentUtterance) {
+                speechSynthesis.cancel();
+            }
+
+            currentUtterance = new SpeechSynthesisUtterance(questionText);
+            currentUtterance.rate = 0.9;
+            currentUtterance.pitch = 1;
+            currentUtterance.volume = 1;
+
+            currentUtterance.onstart = () => {
+                showSuccess('Speaking question...');
+            };
+
+            currentUtterance.onend = () => {
+                showSuccess('Question spoken. You can now start recording your answer.');
+                currentUtterance = null;
+            };
+
+            currentUtterance.onerror = (event) => {
+                showError('Error speaking question: ' + event.error);
+                currentUtterance = null;
+            };
+
+            speechSynthesis.speak(currentUtterance);
+        }
+
+        function stopSpeaking() {
+            if (speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+                currentUtterance = null;
+                showSuccess('Speech stopped.');
+            }
+        }
+
+        // Transcript management functions
+        function updateTranscriptDisplay() {
+            const transcriptDiv = document.getElementById('transcript');
+            let displayText = finalTranscript;
+            
+            if (interimTranscript) {
+                displayText += '<span class="interim-text">' + interimTranscript + '</span>';
+            }
+            
+            if (!displayText.trim()) {
+                displayText = 'Start recording to see the live transcript here...';
+            }
+            
+            transcriptDiv.innerHTML = displayText;
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        function clearTranscript() {
+            finalTranscript = '';
+            interimTranscript = '';
+            updateTranscriptDisplay();
+            updateWordCount();
+            showSuccess('Transcript cleared.');
+        }
+
+        function updateWordCount() {
+            const wordCount = finalTranscript.trim().split(/\s+/).filter(word => word.length > 0).length;
+            document.getElementById('wordCount').textContent = wordCount;
+        }
+
+        // Export functions
+        function downloadTranscript() {
+            if (!finalTranscript.trim()) {
+                showError('No transcript to download. Please record some audio first.');
+                return;
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `interview-transcript-${timestamp}.txt`;
+            
+            const content = `Interview Transcript
+Generated: ${new Date().toLocaleString()}
+Language: ${document.getElementById('languageSelect').value}
+Word Count: ${finalTranscript.trim().split(/\s+/).filter(word => word.length > 0).length}
+
+Question: ${document.getElementById('questionInput').value}
+
+Answer:
+${finalTranscript.trim()}`;
+
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            showSuccess('Transcript downloaded successfully!');
+        }
+
+        function copyTranscript() {
+            if (!finalTranscript.trim()) {
+                showError('No transcript to copy. Please record some audio first.');
+                return;
+            }
+
+            navigator.clipboard.writeText(finalTranscript.trim()).then(() => {
+                showSuccess('Transcript copied to clipboard!');
+            }).catch(err => {
+                showError('Failed to copy transcript: ' + err.message);
+            });
+        }
+
+        function analyzeResponse() {
+            if (!finalTranscript.trim()) {
+                showError('No transcript to analyze. Please record some audio first.');
+                return;
+            }
+
+            const wordCount = finalTranscript.trim().split(/\s+/).filter(word => word.length > 0).length;
+            const charCount = finalTranscript.trim().length;
+            const avgWordsPerSentence = finalTranscript.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+            
+            const analysis = `
+📊 RESPONSE ANALYSIS
+===================
+Word Count: ${wordCount}
+Character Count: ${charCount}
+Estimated Speaking Time: ${Math.round(wordCount / 150 * 60)} seconds
+Sentences: ${avgWordsPerSentence}
+Average Words per Sentence: ${Math.round(wordCount / avgWordsPerSentence)}
+
+🎯 READINESS FOR AI ANALYSIS
+This transcript is now ready to be processed by your AI agents for:
+• Content analysis
+• Sentiment evaluation  
+• Answer completeness assessment
+• Communication skills evaluation
+• Technical accuracy review
+
+📝 NEXT STEPS
+1. Save this transcript using the download button
+2. Feed it to your AI analysis pipeline
+3. Generate comprehensive interview report
+            `.trim();
+
+            // Create a popup or modal to show analysis
+            const analysisWindow = window.open('', '_blank', 'width=600,height=500');
+            analysisWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Response Analysis</title>
+                        <style>
+                            body { font-family: 'Courier New', monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+                            pre { white-space: pre-wrap; line-height: 1.4; }
+                        </style>
+                    </head>
+                    <body>
+                        <pre>${analysis}</pre>
+                        <hr style="border-color: #00ff00;">
+                        <h3>TRANSCRIPT:</h3>
+                        <pre style="color: #ffffff; background: #2a2a2a; padding: 15px; border-radius: 5px;">${finalTranscript.trim()}</pre>
+                    </body>
+                </html>
+            `);
+            
+            showSuccess('Analysis generated! Check the new window for detailed results.');
+        }
+
+        // UI helper functions
+        function updateUI() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const recordingIndicator = document.getElementById('recordingIndicator');
+            const languageSelect = document.getElementById('languageSelect');
+
+            if (isRecording) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                recordingIndicator.classList.add('active');
+                languageSelect.disabled = true;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                recordingIndicator.classList.remove('active');
+                languageSelect.disabled = false;
+            }
+        }
+
+        function updateStatus(status) {
+            document.getElementById('statusText').textContent = status;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            hideSuccess();
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            hideError();
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function hideSuccess() {
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        function hideMessages() {
+            hideError();
+            hideSuccess();
+        }
+
+        function showMicHelper() {
+            document.getElementById('micPermissionHelper').style.display = 'block';
+        }
+
+        function hideMicHelper() {
+            document.getElementById('micPermissionHelper').style.display = 'none';
+        }
+
+        // Event listeners
+        document.getElementById('languageSelect').addEventListener('change', function() {
+            if (recognition) {
+                recognition.lang = this.value;
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                switch(event.key) {
+                    case 'r':
+                        event.preventDefault();
+                        if (!isRecording) {
+                            startRecording();
+                        } else {
+                            stopRecording();
+                        }
+                        break;
+                    case 's':
+                        event.preventDefault();
+                        speakQuestion();
+                        break;
+                    case 'k':
+                        event.preventDefault();
+                        clearTranscript();
+                        break;
+                }
+            }
+        });
+
+        // Initialize the app when page loads
+        window.addEventListener('load', initializeApp);
+    </script>
+</body>
+</html>

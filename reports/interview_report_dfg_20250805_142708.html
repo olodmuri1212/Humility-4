@@ -1,0 +1,538 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Comprehensive Interview Analysis</title>
+            <style>
+                :root {
+                    --primary: #2c3e50;
+                    --secondary: #2c82c9;
+                    --success: #27ae60;
+                    --warning: #f39c12;
+                    --danger: #e74c3c;
+                    --light: #f8f9fa;
+                    --dark: #2c3e50;
+                    --text: #2c3e50;
+                    --text-light: #6c757d;
+                    --border: #e0e0e0;
+                    --card-bg: #ffffff;
+                    --body-bg: #f5f7fa;
+                }
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    line-height: 1.8;
+                    margin: 0;
+                    padding: 20px;
+                    color: var(--text);
+                    background-color: var(--body-bg);
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                
+                @media print {
+                    body {
+                        padding: 0;
+                        background: white !important;
+                    }
+                    .container {
+                        box-shadow: none !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        max-width: 100% !important;
+                    }
+                    .question-section {
+                        page-break-inside: avoid;
+                    }
+                }
+                .container {
+                    max-width: 1000px;
+                    margin: 0 auto;
+                    background: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                    border: 1px solid var(--border);
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                    padding-bottom: 20px;
+                    border-bottom: 1px solid #eee;
+                }
+                .candidate-info {
+                    text-align: center;
+                    margin-bottom: 30px;
+                }
+                .overall-score {
+                    text-align: center;
+                    margin: 30px 0;
+                    padding: 20px;
+                    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+                    border-radius: 10px;
+                }
+                .overall-score .score {
+                    font-size: 48px;
+                    font-weight: 700;
+                    color: var(--primary);
+                    margin: 10px 0;
+                }
+                .scores-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 15px;
+                    margin: 30px 0;
+                }
+                .score-card {
+                    background: var(--card-bg);
+                    border-radius: 8px;
+                    padding: 20px;
+                    text-align: center;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                    border-top: 4px solid var(--secondary);
+                    border: 1px solid var(--border);
+                    transition: transform 0.2s ease, box-shadow 0.2s ease;
+                }
+                .score-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                }
+                .score-card .label {
+                    font-size: 14px;
+                    color: #6c757d;
+                    margin-bottom: 10px;
+                }
+                .score-card .value {
+                    font-size: 28px;
+                    font-weight: 700;
+                    margin: 10px 0;
+                }
+                .question-section {
+                    margin: 30px 0;
+                    padding: 25px;
+                    background: var(--card-bg);
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+                }
+                .question-text {
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: var(--primary);
+                    margin-bottom: 15px;
+                }
+                .answer-text {
+                    background: white;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin: 15px 0;
+                    border-left: 3px solid #dee2e6;
+                }
+                .analysis-section {
+                    margin: 20px 0;
+                }
+                .trait-analysis {
+                    margin: 15px 0;
+                    padding: 18px 20px;
+                    background: var(--card-bg);
+                    border-radius: 6px;
+                    border-left: 4px solid var(--secondary);
+                    border: 1px solid var(--border);
+                    transition: all 0.2s ease;
+                }
+                .trait-analysis:hover {
+                    border-left-color: var(--primary);
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                }
+                .trait-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                }
+                .trait-name {
+                    font-weight: 600;
+                    color: var(--primary);
+                }
+                .trait-score {
+                    font-weight: 700;
+                }
+                .trait-evidence {
+                    color: var(--text-light);
+                    font-size: 15px;
+                    margin-top: 10px;
+                    line-height: 1.6;
+                }
+                .suggestions {
+                    background: rgba(255, 193, 7, 0.1);
+                    padding: 22px 25px;
+                    border-radius: 8px;
+                    margin: 35px 0 20px;
+                    border-left: 4px solid #ffc107;
+                    border: 1px solid rgba(255, 193, 7, 0.3);
+                }
+                .suggestions h3 {
+                    color: #e65100;
+                    margin-top: 0;
+                }
+                .suggestions ul {
+                    padding-left: 20px;
+                }
+                .suggestions li {
+                    margin-bottom: 8px;
+                }
+                @media (max-width: 768px) {
+                    .scores-grid {
+                        grid-template-columns: 1fr 1fr;
+                    }
+                }
+                @media (max-width: 480px) {
+                    .scores-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    .container {
+                        padding: 15px;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Comprehensive Interview Analysis</h1>
+                    <p>Detailed assessment of candidate responses</p>
+                </div>
+                
+                <div class="candidate-info">
+                    <h2 style="margin: 0 0 5px 0; color: var(--primary);">dfg</h2>
+                    <p style="color: #6c757d; margin: 0;">Report generated on: 2025-08-05 14:26:07</p>
+                </div>
+                
+                <div class="overall-score">
+                    <div style="font-size: 18px; color: #6c757d;">Overall Performance</div>
+                    <div class="score" style="color: #e74c3c;">
+                        2.5/10
+                    </div>
+                    <div style="font-size: 18px; color: #6c757d;">
+                        Needs Improvement
+                    </div>
+                </div>
+                
+                <h3 style="color: var(--primary); border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                    Key Assessment Areas
+                </h3>
+                
+                <div class="scores-grid">
+        
+            <div class="score-card">
+                <div class="label">Humility</div>
+                <div class="value" style="color: #e74c3c;">0.4/10</div>
+                <div style="font-size: 14px; color: #6c757d;">Needs Improvement</div>
+            </div>
+            
+            <div class="score-card">
+                <div class="label">Learning</div>
+                <div class="value" style="color: #e74c3c;">0.0/10</div>
+                <div style="font-size: 14px; color: #6c757d;">Needs Improvement</div>
+            </div>
+            
+            <div class="score-card">
+                <div class="label">Feedback</div>
+                <div class="value" style="color: #e74c3c;">0.0/10</div>
+                <div style="font-size: 14px; color: #6c757d;">Needs Improvement</div>
+            </div>
+            
+            <div class="score-card">
+                <div class="label">Mistakes</div>
+                <div class="value" style="color: #27ae60;">9.4/10</div>
+                <div style="font-size: 14px; color: #6c757d;">Excellent</div>
+            </div>
+            
+                </div>
+                
+                <div class="content">
+                    <h3 style="color: var(--primary); border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 40px;">
+                        Detailed Response Analysis
+                    </h3>
+        
+            <div class="question-section">
+                <div class="question-text">
+                    <span style="color: var(--secondary);">Q1.</span> Can you tell me about a time when you received constructive criticism? How did you handle it?
+                </div>
+                <div class="answer-text">
+                    <strong>Response:</strong> I would like to congratulate the people who have worked so hard.  I wish that the people who have worked so hard can be able to do these good things.  I would like to congratulate them.
+                </div>
+                
+                <div class="analysis-section">
+                    <h4 style="color: var(--primary); margin: 20px 0 10px 0;">Analysis</h4>
+            
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Humility</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of humility found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Learning</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of learning mindset found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Feedback</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of feedback seeking found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Mistakes</span>
+                        <span class="trait-score" style="color: #27ae60;">10.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No clear indicators of mistake handling found
+                    </div>
+                </div>
+                
+                </div>
+            </div>
+            
+            <div class="question-section">
+                <div class="question-text">
+                    <span style="color: var(--secondary);">Q2.</span> Describe a situation where you had to work with a difficult team member. How did you handle it?
+                </div>
+                <div class="answer-text">
+                    <strong>Response:</strong> I think it's important to have the time that I have received the  most effective practices of my knowledge that I had that  that I can do.  I think it's possible to do that.
+                </div>
+                
+                <div class="analysis-section">
+                    <h4 style="color: var(--primary); margin: 20px 0 10px 0;">Analysis</h4>
+            
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Humility</span>
+                        <span class="trait-score" style="color: #e74c3c;">2.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        Found humility indicators: i think
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Learning</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of learning mindset found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Feedback</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of feedback seeking found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Mistakes</span>
+                        <span class="trait-score" style="color: #27ae60;">10.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No clear indicators of mistake handling found
+                    </div>
+                </div>
+                
+                </div>
+            </div>
+            
+            <div class="question-section">
+                <div class="question-text">
+                    <span style="color: var(--secondary);">Q3.</span> Tell me about a time when you made a mistake at work. How did you address it?
+                </div>
+                <div class="answer-text">
+                    <strong>Response:</strong> When people are among them, they get some time to feel ...  ...and they're welcome, and I have to practice, and when I come home, I have to practice.  I really hope that will come, and I'll be able to achieve that.
+                </div>
+                
+                <div class="analysis-section">
+                    <h4 style="color: var(--primary); margin: 20px 0 10px 0;">Analysis</h4>
+            
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Humility</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of humility found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Learning</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of learning mindset found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Feedback</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of feedback seeking found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Mistakes</span>
+                        <span class="trait-score" style="color: #27ae60;">10.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No clear indicators of mistake handling found
+                    </div>
+                </div>
+                
+                </div>
+            </div>
+            
+            <div class="question-section">
+                <div class="question-text">
+                    <span style="color: var(--secondary);">Q4.</span> How do you handle situations where you need to learn something new?
+                </div>
+                <div class="answer-text">
+                    <strong>Response:</strong> I was talking about the time that I was in a separate place.  I was on the trip to the premises of a place that I had to visit.  I had to visit a place that I had to visit.  I had to go to the place that I had to visit.
+                </div>
+                
+                <div class="analysis-section">
+                    <h4 style="color: var(--primary); margin: 20px 0 10px 0;">Analysis</h4>
+            
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Humility</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of humility found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Learning</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of learning mindset found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Feedback</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of feedback seeking found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Mistakes</span>
+                        <span class="trait-score" style="color: #f39c12;">7.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        Mistake handling indicators: negative: had to
+                    </div>
+                </div>
+                
+                </div>
+            </div>
+            
+            <div class="question-section">
+                <div class="question-text">
+                    <span style="color: var(--secondary);">Q5.</span> Can you share an example of when you had to adapt to a significant change at work?
+                </div>
+                <div class="answer-text">
+                    <strong>Response:</strong> I was in a trauma that I was feeling while I was travelling.  It's great, it's good.  This is a moment I heard that...  That is completely different.
+                </div>
+                
+                <div class="analysis-section">
+                    <h4 style="color: var(--primary); margin: 20px 0 10px 0;">Analysis</h4>
+            
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Humility</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of humility found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Learning</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of learning mindset found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Feedback</span>
+                        <span class="trait-score" style="color: #e74c3c;">0.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No strong indicators of feedback seeking found
+                    </div>
+                </div>
+                
+                <div class="trait-analysis">
+                    <div class="trait-header">
+                        <span class="trait-name">Mistakes</span>
+                        <span class="trait-score" style="color: #27ae60;">10.0/10</span>
+                    </div>
+                    <div class="trait-evidence">
+                        No clear indicators of mistake handling found
+                    </div>
+                </div>
+                
+                <div class="suggestions">
+                    <h3>Suggestions for Improvement</h3>
+                    <ul>
+                <li>Consider showing more humility by acknowledging limitations and being open to learning from others.</li><li>Demonstrate more of a learning mindset by discussing how you've grown from experiences.</li><li>Try to be more open to feedback and show how you've incorporated it in the past.</li>
+                    </ul>
+                </div>
+                
+                </div>
+            </div>
+            
+                </div>
+            </div>
+        </body>
+        </html>
+        

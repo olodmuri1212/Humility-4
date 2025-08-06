@@ -1,0 +1,10 @@
+#!/bin/sh
+'''exec' '/home/sanjay/Downloads/Humility_INt-main (3)/Humility_INt-main/Humility_INt-main/py310_venv/bin/python3' "$0" "$@"
+' '''
+# -*- coding: UTF-8 -*-
+from __future__ import print_function, division, absolute_import
+
+from numba.misc.numba_entry import main
+
+if __name__ == "__main__":
+    main()

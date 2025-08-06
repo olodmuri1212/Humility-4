@@ -1,0 +1,13 @@
+<!DOCTYPE html><title>Mic test</title>
+<button id="btn">🎙️ Start test</button>
+<pre id="log"></pre>
+<script>
+document.getElementById('btn').onclick = async () => {
+  const log = m => document.getElementById('log').textContent += m + "\n";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    log("✅ Microphone stream obtained: " + stream.getAudioTracks()[0].label);
+    stream.getTracks().forEach(t => t.stop());
+  } catch(e){ log("❌ getUserMedia failed: "+e.message); }
+};
+</script>

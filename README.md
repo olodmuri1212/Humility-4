@@ -1,5 +1,5 @@
-# 🎤 Humility Interview System
 
+<<<<<<< HEAD
 AI-Powered Interview Practice with Real-time Speech Recognition and Analysis
 
 ## ✨ Features
@@ -199,3 +199,5 @@ For issues and questions:
 - Review backend logs
 - Open an issue on GitHub
 # Humility-3
+=======
+>>>>>>> be1121112650ad4a953f9aad159b975d9ba7e31c

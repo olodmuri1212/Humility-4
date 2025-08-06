@@ -1,0 +1,20 @@
+Collecting onnxruntime
+  Using cached onnxruntime-1.22.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+Collecting openai-whisper
+  Using cached openai_whisper-20250625.tar.gz (803 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting transformers
+  Using cached transformers-4.54.1-py3-none-any.whl.metadata (41 kB)
+Collecting coloredlogs (from onnxruntime)
+  Using cached coloredlogs-15.0.1-py2.py3-none-any.whl.metadata (12 kB)
+Collecting flatbuffers (from onnxruntime)
+  Using cached flatbuffers-25.2.10-py2.py3-none-any.whl.metadata (875 bytes)
+Collecting numpy>=1.21.6 (from onnxruntime)
+  Using cached numpy-2.3.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting packaging (from onnxruntime)
+  Using cached packaging-25.0-py3-none-any.whl.metadata (3.3 kB)

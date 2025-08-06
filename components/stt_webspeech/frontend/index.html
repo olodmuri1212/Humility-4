@@ -1,0 +1,122 @@
+<!-- <link rel="stylesheet" href="style.css" />
+<div id="controls">
+  <button id="start">🎙️ Start</button>
+  <button id="stop">⏹️ Stop</button>
+  <select id="lang"></select>
+</div>
+<pre id="output"></pre>
+
+<script>
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+recognition.continuous = true;
+recognition.interimResults = true;
+let finalTranscript = "";
+
+recognition.onresult = (event) => {
+  let interim = "";
+  for (let i = event.resultIndex; i < event.results.length; ++i) {
+    const res = event.results[i][0];
+    if (event.results[i].isFinal) {
+      finalTranscript += res.transcript + " ";
+    } else {
+      interim += res.transcript;
+    }
+  }
+  document.getElementById("output").textContent =
+      finalTranscript + "⬛" + interim;      // live cursor
+
+  /* Send transcript back to Streamlit */
+  Streamlit.setComponentValue(finalTranscript + interim);
+};
+
+document.getElementById("start").onclick = () => recognition.start();
+document.getElementById("stop").onclick  = () => recognition.stop();
+
+/* Populate language list */
+for (const v of window.speechSynthesis.getVoices()) {
+  const opt = new Option(`${v.lang} – ${v.name}`, v.lang);
+  document.getElementById("lang").add(opt);
+}
+document.getElementById("lang").onchange = (e) => {
+  recognition.lang = e.target.value;
+};
+</script> -->
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Streamlit Web Speech</title>
+    <style>
+      #controls { margin-bottom: .5rem; }
+      #output { font-family: monospace; white-space: pre-wrap; }
+      #error { color: red; }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <button id="start">🎙️ Start</button>
+      <button id="stop">⏹️ Stop</button>
+      <select id="lang"></select>
+    </div>
+    <pre id="output">[waiting…]</pre>
+    <pre id="error"></pre>
+
+    <script>
+      const Streamlit = window.parent.streamlit;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        document.getElementById("error").textContent = "❌ Web Speech API not supported";
+        Streamlit.setComponentValue("__UNSUPPORTED__");
+      } else {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        let finalTranscript = "";
+
+        recognition.onresult = (event) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const { transcript, confidence } = event.results[i][0];
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + " ";
+            } else {
+              interim += transcript;
+            }
+          }
+          const full = finalTranscript + interim;
+          document.getElementById("output").textContent = full;
+          Streamlit.setComponentValue(full);
+        };
+
+        recognition.onerror = (evt) => {
+          console.error("SpeechRecognition error", evt);
+          document.getElementById("error").textContent =
+            `❌ Error (${evt.error}): ${evt.message || ""}`;
+          Streamlit.setComponentValue(`__ERROR__:${evt.error}`);
+        };
+
+        document.getElementById("start").onclick = () => {
+          document.getElementById("error").textContent = "";
+          recognition.start();
+        };
+        document.getElementById("stop").onclick  = () => recognition.stop();
+
+        // populate language list
+        speechSynthesis.getVoices().forEach(v => {
+          const opt = new Option(`${v.lang} – ${v.name}`, v.lang);
+          document.getElementById("lang").add(opt);
+        });
+        document.getElementById("lang").onchange = e => {
+          recognition.lang = e.target.value;
+        };
+      }
+    </script>
+  </body>
+</html>
