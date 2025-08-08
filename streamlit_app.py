@@ -113,58 +113,69 @@ def transcribe_audio(audio_b64: str) -> Tuple[Optional[str], Optional[str]]:
     except Exception as e:
         return None, f"Error during transcription: {str(e)}"
 
+# Add report generation function
+def generate_report(question: str, transcript: str, analysis: dict) -> str:
+    """Generate a formatted report based on the interview analysis."""
+    if not analysis:
+        return "No analysis data available to generate report."
+    
+    report = f"# Interview Analysis Report\n\n"
+    report += f"## Question\n{question}\n\n"
+    report += f"## Response\n{transcript}\n\n"
+    
+    # Add scores section
+    report += "## Analysis Results\n"
+    if 'scores' in analysis and isinstance(analysis['scores'], dict):
+        for category, score_info in analysis['scores'].items():
+            if isinstance(score_info, dict):
+                score = score_info.get('score', 0) * 100
+                report += f"- **{category.title()}**: {score:.1f}%\n"
+            else:
+                score = float(score_info) * 100
+                report += f"- **{category.title()}**: {score:.1f}%\n"
+    
+    # Add feedback section
+    if 'feedback' in analysis:
+        report += "\n## Feedback\n"
+        if isinstance(analysis['feedback'], list):
+            for item in analysis['feedback']:
+                report += f"- {item}\n"
+    # Add suggestions section
+    if 'suggestions' in analysis and analysis['suggestions']:
+        report += "\n## Suggestions for Improvement\n"
+        if isinstance(analysis['suggestions'], list):
+            for suggestion in analysis['suggestions']:
+                report += f"- {suggestion}\n"
+    return report
+
 # Audio Recorder Component
 class AudioRecorder(AudioProcessorBase):
     def __init__(self):
         self.audio_frames = []
         self.sample_rate = 16000
-        
+    
     def recv_audio(self, frame):
         self.audio_frames.append(frame.to_ndarray())
         return frame
     
-    def get_audio_data(self) -> Optional[Tuple[np.ndarray, int]]:
+    def get_audio_data(self):
         if not self.audio_frames:
             return None
-        
-        try:
-            # Combine all audio frames
-            audio_array = np.concatenate(self.audio_frames, axis=0)
-            
-            # Convert to mono if stereo
-            if len(audio_array.shape) > 1 and audio_array.shape[1] > 1:
-                audio_array = np.mean(audio_array, axis=1)
-                
-            # Normalize audio
-            if np.abs(audio_array).max() > 0:
-                audio_array = audio_array / np.abs(audio_array).max()
-                
-            return audio_array, self.sample_rate
-        except Exception as e:
-            st.error(f"Error processing audio: {str(e)}")
-            return None
+        return np.concatenate(self.audio_frames, axis=0), self.sample_rate
 
-def handle_speech_messages():
-    if 'transcript' in st.query_params:
-        try:
-            msg = json.loads(st.query_params['transcript'])
-            if msg.get('isStreamlitMessage'):
-                if msg.get('type') == 'transcript':
-                    st.session_state.interim_transcript = msg.get('interim', '')
-                    st.session_state.final_transcript = msg.get('final', '')
-                    st.session_state.transcript = st.session_state.final_transcript
-                    st.rerun()
-                elif msg.get('type') == 'recordingState':
-                    st.session_state.is_recording = msg.get('isRecording', False)
-                    st.rerun()
-                elif msg.get('type') == 'speechError':
-                    error_msg = msg.get('error', '')
-                    st.session_state.speech_error = error_msg if error_msg else None
-                    if error_msg:
-                        st.toast(f"Speech recognition error: {error_msg}", icon="⚠️")
-                    st.rerun()
-        except json.JSONDecodeError as e:
-            st.error(f"Error processing message: {e}")
+def process_audio(audio_processor):
+    """Process the recorded audio and return the audio data."""
+    if not audio_processor:
+        return None, "No audio processor available"
+    
+    audio_data = audio_processor.get_audio_data()
+    if not audio_data:
+        return None, "No audio data recorded"
+    
+    audio_array, sample_rate = audio_data
+    buffer = BytesIO()
+    sf.write(buffer, audio_array, sample_rate, format='WAV')
+    return buffer.getvalue(), None
 
 # Main content columns
 col1, col2 = st.columns([1, 1], gap="large")
@@ -183,44 +194,47 @@ with col1:
             audio_processor_factory=AudioRecorder,
             media_stream_constraints={"audio": True, "video": False},
             async_processing=True,
+            rtc_configuration={
+                "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+            }
         )
         
-        # Process recorded audio when recording stops
-        if webrtc_ctx.audio_processor and st.button("Stop Recording & Analyze"):
-            with st.spinner("Processing your response..."):
-                # Get audio data
-                audio_processor = webrtc_ctx.audio_processor
-                audio_data = audio_processor.get_audio_data()
-                
-                if audio_data:
-                    # Save audio to bytes
-                    audio_array, sample_rate = audio_data
-                    buffer = BytesIO()
-                    sf.write(buffer, audio_array, sample_rate, format='WAV')
-                    audio_bytes = buffer.getvalue()
+        # Add a button to process the recorded audio
+        if st.button("Process Recording"):
+            if webrtc_ctx.audio_processor:
+                with st.spinner("Processing your response..."):
+                    # Process the recorded audio
+                    audio_bytes, error = process_audio(webrtc_ctx.audio_processor)
                     
-                    # Convert to base64 for API
-                    audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
-                    
-                    # Transcribe audio
-                    transcript, error = transcribe_audio(audio_b64)
-                    
-                    if transcript is not None:
-                        st.session_state.transcript = transcript
-                        st.session_state.audio_data = audio_bytes
+                    if audio_bytes:
+                        # Convert to base64 for API
+                        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
                         
-                        # Analyze transcript
-                        analysis, error = analyze_transcript(transcript, st.session_state.question)
-                        
-                        if analysis is not None:
-                            st.session_state.analysis = analysis
-                            st.success("Analysis complete!")
+                        # Transcribe audio
+                        transcript, error = transcribe_audio(audio_b64)
+                        if transcript:
+                            st.session_state.audio_data = audio_bytes
+                            st.session_state.transcript = transcript
+                            
+                            # Analyze transcript
+                            analysis, analysis_error = analyze_transcript(
+                                transcript, 
+                                st.session_state.question
+                            )
+                            
+                            if analysis is not None:
+                                st.session_state.analysis = analysis
+                                st.success("Analysis complete!")
+                                st.rerun()
+                            else:
+                                st.error(f"Analysis failed: {analysis_error}")
                         else:
-                            st.error(f"Analysis failed: {error}")
+                            st.error(f"Transcription failed: {error}")
                     else:
-                        st.error(f"Transcription failed: {error}")
-                else:
-                    st.warning("No audio data recorded. Please try again.")
+                        st.error(f"Error processing audio: {error}")
+            else:
+                st.warning("No audio recording available. Please record your response first.")
+    
     elif st.session_state.analysis_mode == "manual":
         # Manual text input section
         st.session_state.transcript = st.text_area(
@@ -541,6 +555,28 @@ with col1:
             st.warning("Please record your response first.")
 
 # Call the message handler
+def handle_speech_messages():
+    if 'transcript' in st.query_params:
+        try:
+            msg = json.loads(st.query_params['transcript'])
+            if msg.get('isStreamlitMessage'):
+                if msg.get('type') == 'transcript':
+                    st.session_state.interim_transcript = msg.get('interim', '')
+                    st.session_state.final_transcript = msg.get('final', '')
+                    st.session_state.transcript = st.session_state.final_transcript
+                    st.rerun()
+                elif msg.get('type') == 'recordingState':
+                    st.session_state.is_recording = msg.get('isRecording', False)
+                    st.rerun()
+                elif msg.get('type') == 'speechError':
+                    error_msg = msg.get('error', '')
+                    st.session_state.speech_error = error_msg if error_msg else None
+                    if error_msg:
+                        st.toast(f"Speech recognition error: {error_msg}", icon="⚠️")
+                    st.rerun()
+        except json.JSONDecodeError as e:
+            st.error(f"Error processing message: {e}")
+
 handle_speech_messages()
 
 # Clear error message when switching modes
@@ -623,6 +659,29 @@ with col2:
     
     elif st.session_state.analysis_mode == "manual":
         st.info("Enter your response in the left panel and click 'Analyze Response' to see results here.")
+
+# Add report generation section
+with col2:
+    if st.session_state.transcript and st.session_state.analysis:
+        st.markdown("### 📄 Generate Report")
+        if st.button("📥 Download Report"):
+            report = generate_report(
+                st.session_state.question,
+                st.session_state.transcript,
+                st.session_state.analysis
+            )
+            
+            # Create download button for the report
+            st.download_button(
+                label="Download Report (Markdown)",
+                data=report,
+                file_name="interview_analysis_report.md",
+                mime="text/markdown"
+            )
+            
+            # Also show a preview
+            with st.expander("Preview Report"):
+                st.markdown(report)
 
 # Add JavaScript to handle Web Speech API messages
 st.components.v1.html("""

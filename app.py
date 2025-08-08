@@ -221,7 +221,8 @@ elif status == "in_progress" and st.session_state.recorder_active:
         key="recorder",
         mode=WebRtcMode.SENDONLY,
         audio_processor_factory=AudioRecorder,
-        medi
+        media_stream_constraints={"video": False, "audio": True},
+    
 async def process_recorded_audio(audio_bytes: bytes):
     """Handles transcription and analysis of the user's recorded audio."""
     state: InterviewState = st.session_state.interview_state
