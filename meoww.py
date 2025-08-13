@@ -14,17 +14,16 @@ def analyze_answers(*answers):
     scores = []
     for answer in answers:
         # Placeholder for analysis logic
-        # Here you can implement your scoring logic based on the answer
-        score = len(answer) % 10  # Example scoring logic based on answer length
+        # Example scoring logic based on answer length
+        score = len(answer) % 10
         scores.append(score)
-
     return scores
 
 def generate_report(*answers):
     """Generate a report based on the answers."""
     scores = analyze_answers(*answers)
     report = "### Candidate Report\n\n"
-    
+
     for i, (question, answer, score) in enumerate(zip(QUESTIONS, answers, scores)):
         report += f"**Q: {question}**\n"
         report += f"A: {answer}\n"
@@ -38,7 +37,10 @@ with gr.Blocks(title="Interview Report Generator") as demo:
 
     answer_inputs = []
     for question in QUESTIONS:
-        answer_input = gr.Textbox(label=question, placeholder="Enter your answer here")
+        answer_input = gr.Textbox(
+            label=question,
+            placeholder="Enter your answer here"
+        )
         answer_inputs.append(answer_input)
 
     generate_btn = gr.Button("Generate Report")
@@ -52,15 +54,3 @@ with gr.Blocks(title="Interview Report Generator") as demo:
 
 if __name__ == "__main__":
     demo.launch(server_name="localhost", server_port=7860)
-
-
-
-
-
-
-
-
-
-
-
-
