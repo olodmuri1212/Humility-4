@@ -476,7 +476,495 @@
 
 
 
-###take 3 
+# ###take 3 
+# # report_generator.py
+# import os
+# from typing import List, Dict, Any, Optional
+# from datetime import datetime
+
+# _WEASY_AVAILABLE = True
+# try:
+#     from weasyprint import HTML  # type: ignore
+# except Exception:
+#     _WEASY_AVAILABLE = False
+
+
+# # -------------------------- helpers --------------------------
+
+# def _safe_filename(name: str) -> str:
+#     return "".join(c if c.isalnum() else "_" for c in name)
+
+# def _clean_agent_name(name: str) -> str:
+#     if not name:
+#         return ""
+#     return name[:-5] if name.endswith("Agent") else name
+
+# def _score_class(v: float) -> str:
+#     if v >= 8: return "ok"
+#     if v >= 5: return "warn"
+#     return "bad"
+
+# def _name_has(name_lower: str, needles: List[str]) -> bool:
+#     return any(n in name_lower for n in needles)
+
+
+# # ------------------- humility from LLM agents only -------------------
+
+# def _humility_from_llm_only(
+#     llm_agents: List[Dict[str, Any]],
+#     fallback_parser_humility: float = 0.0
+# ) -> float:
+#     """
+#     Compute final Humility from LLM agents ONLY, excluding:
+#       - IDontKnow
+#       - Pronoun*
+#       - ShareCredit
+#       - PraiseHandling (typo-safe: also excludes 'precisehandling')
+
+#     Anti-humility agents are inverted (10 - score):
+#       - BragFlag, KnowItAll, BlameShift
+
+#     If nothing remains after exclusion, fall back to parser humility average.
+#     """
+#     if not llm_agents:
+#         return round(float(fallback_parser_humility), 1)
+
+#     # Exclusions (case-insensitive, substring match)
+#     exclude_needles = ["idontknow", "pronoun", "sharecredit", "praisehandling", "precisehandling"]
+
+#     # Agents where a higher raw score means lower humility signal (invert)
+#     invert_needles = ["bragflag", "knowitall", "blameshift"]
+
+#     included_vals: List[float] = []
+#     for a in llm_agents:
+#         raw_name = str(a.get("agent_name", ""))
+#         nl = raw_name.lower()
+
+#         # skip explicit exclusions
+#         if _name_has(nl, exclude_needles):
+#             continue
+
+#         # take score safely
+#         try:
+#             s = float(a.get("score", 0.0))
+#         except Exception:
+#             s = 0.0
+
+#         # invert negative-signal agents
+#         if _name_has(nl, invert_needles):
+#             s = 10.0 - s
+
+#         included_vals.append(s)
+
+#     if not included_vals:
+#         return round(float(fallback_parser_humility), 1)
+
+#     final = sum(included_vals) / len(included_vals)
+#     return round(max(0.0, min(10.0, final)), 1)
+
+
+# # -------------------------- html builder --------------------------
+
+# def build_full_report_html(
+#     analysis_payload: Dict[str, Any],
+#     llm_agents: List[Dict[str, Any]] | None = None
+# ) -> str:
+#     """
+#     PDF layout per latest request:
+
+#       - Core Behavioral Traits: show ONLY Humility, computed from LLM agents only,
+#         excluding IDontKnow, Pronoun*, ShareCredit, and PraiseHandling/PreciseHandling.
+#         (BragFlag/KnowItAll/BlameShift are inverted as 10 - score.)
+#       - Detailed Response Analysis (per question): show Humility score, Learning score,
+#         and Feedback (text). No Mistakes section.
+#       - LLM Agents table: hide IDontKnow and PronounRatio rows; show others with names
+#         cleaned (drop 'Agent' suffix).
+#     """
+#     candidate = analysis_payload.get("candidate_name", "Candidate")
+#     gen_at = analysis_payload.get("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+#     overall = analysis_payload.get("overall_scores", {}) or {}
+#     turns = analysis_payload.get("turns", []) or []
+
+#     llm_agents = llm_agents or []
+
+#     # 1) Humility (Core) — from LLM agents only (with exclusions/inversions)
+#     parser_humility_avg = float(overall.get("humility", 0.0))
+#     humility_final = _humility_from_llm_only(llm_agents, fallback_parser_humility=parser_humility_avg)
+
+#     # 2) LLM agents table — hide IDontKnow & PronounRatio in display
+#     hide_in_table_needles = ["idontknow", "pronoun"]
+#     llm_agents_display = []
+#     for a in llm_agents:
+#         raw_name = str(a.get("agent_name", ""))
+#         nl = raw_name.lower()
+#         if _name_has(nl, hide_in_table_needles):
+#             continue
+#         llm_agents_display.append({
+#             "agent_name": _clean_agent_name(raw_name),
+#             "score": float(a.get("score", 0.0)),
+#             "evidence": a.get("evidence", "") or ""
+#         })
+
+#     # -------------------------- styles --------------------------
+#     style = """
+#     <style>
+#       :root{
+#         --bg:#0f1115; --card:#171a21; --ink:#e6e6e6; --muted:#9aa0a6;
+#         --primary:#4a90e2; --ok:#2ecc71; --warn:#f1c40f; --bad:#e74c3c; --border:#2a2f3a
+#       }
+#       body{font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);margin:0;padding:24px;}
+#       .wrap{max-width:980px;margin:0 auto;}
+#       .hdr{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+#       h1{margin:0 0 6px 0;color:var(--primary)}
+#       .meta{color:var(--muted);font-size:14px}
+#       .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+#       .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+#       .score{font-size:28px;font-weight:800;margin-top:8px}
+#       .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+#       .sec h2{color:var(--primary);margin:24px 0 8px 0}
+#       .q{color:var(--primary);font-weight:600}
+#       .ans{background:#1c212b;border-left:4px solid var(--primary);padding:12px;border-radius:8px;margin:8px 0}
+#       .trait{background:#181c25;border-left:3px solid var(--primary);padding:10px;border-radius:6px;margin:8px 0;color:#cfd3da}
+#       table{width:100%;border-collapse:collapse;border:1px solid var(--border)}
+#       th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left}
+#       th{color:var(--muted);font-weight:600}
+#       .fbtext{background:#1b202a;border-left:3px solid #58a6ff;padding:10px;border-radius:6px;margin-top:8px;color:#cfd3da}
+#       .note{color:var(--muted);font-size:12px;margin-top:6px}
+#     </style>
+#     """
+
+#     # ---------------------- core section (Humility only) ----------------------
+#     core_html = f"""
+#     <div class="card">
+#       <div>Humility</div>
+#       <div class="score {_score_class(humility_final)}">{humility_final:.1f}/10</div>
+#       <div class="note">
+#         Computed from agent signals only; excludes IDontKnow, Pronoun*, ShareCredit, and PraiseHandling.
+#         Anti‑humility agents (BragFlag/KnowItAll/BlameShift) are inverted.
+#       </div>
+#     </div>"""
+
+#     # ---------------------- LLM Agents table (filtered) ----------------------
+#     llm_rows = "".join(
+#         f"<tr><td>{a['agent_name']}</td><td>{a['score']:.2f}</td>"
+#         f"<td><div style='color:#aab0b7;font-size:12px'>{(a['evidence'] or '').strip()}</div></td></tr>"
+#         for a in llm_agents_display
+#     )
+#     llm_html = f"""
+#     <div class="sec">
+#       <h2>LLM Agents — Detailed Scores</h2>
+#       <div class="card">
+#         <table>
+#           <thead><tr><th>Agent</th><th>Score</th><th>Evidence</th></tr></thead>
+#           <tbody>{llm_rows}</tbody>
+#         </table>
+#       </div>
+#     </div>"""
+
+#     # ---------------------- per-question section ----------------------
+#     # Show: Humility score + Learning score + Feedback text (no Mistakes)
+#     turns_html = ""
+#     for t in turns:
+#         hum = float(t["scores"]["humility"])
+#         lrn = float(t["scores"]["learning"])
+#         hum_ev = t["evidence"]["humility"]
+#         lrn_ev = t["evidence"]["learning"]
+#         fb_text = t.get("feedback_text", "")
+#         turns_html += f"""
+#         <div class="card">
+#           <div class="q">Q{t['index']}. {t['question']}</div>
+#           <div class="ans"><b>Response:</b> {t['answer']}</div>
+#           <div class="trait"><b>Humility</b><span style="float:right">{hum:.1f}/10</span>
+#               <div style="color:#aab0b7;font-size:12px;margin-top:4px">{hum_ev}</div>
+#           </div>
+#           <div class="trait"><b>Learning</b><span style="float:right">{lrn:.1f}/10</span>
+#               <div style="color:#aab0b7;font-size:12px;margin-top:4px">{lrn_ev}</div>
+#           </div>
+#           <div class="fbtext"><b>Feedback</b><br>{fb_text}</div>
+#         </div>"""
+
+#     # ---------------------- assemble ----------------------
+#     html = f"""
+#     <!doctype html>
+#     <html><head><meta charset="utf-8"><title>Interview Report</title>{style}</head>
+#     <body><div class="wrap">
+#         <div class="hdr">
+#           <h1>Comprehensive Interview Analysis</h1>
+#           <div class="meta">{candidate} &nbsp;•&nbsp; Generated: {gen_at}</div>
+#         </div>
+
+#         <div class="sec">
+#           <h2>Core Behavioral Traits</h2>
+#           <div class="grid">{core_html}</div>
+#         </div>
+
+#         {llm_html}
+
+#         <div class="sec">
+#           <h2>Detailed Response Analysis</h2>
+#           <div class="grid" style="grid-template-columns:1fr">{turns_html}</div>
+#         </div>
+#     </div></body></html>
+#     """
+#     return html
+
+
+# # -------------------------- save / export --------------------------
+
+# def save_html_report(html: str, candidate_name: str, out_dir: str = "reports") -> str:
+#     os.makedirs(out_dir, exist_ok=True)
+#     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     path = os.path.join(out_dir, f"interview_report_{_safe_filename(candidate_name)}_{ts}.html")
+#     with open(path, "w", encoding="utf-8") as f:
+#         f.write(html)
+#     return path
+
+# def create_pdf_report_from_html(html: str, candidate_name: str, out_dir: str = "reports") -> Optional[str]:
+#     os.makedirs(out_dir, exist_ok=True)
+#     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     pdf_path = os.path.join(out_dir, f"interview_report_{_safe_filename(candidate_name)}_{ts}.pdf")
+#     if _WEASY_AVAILABLE:
+#         HTML(string=html).write_pdf(pdf_path)
+#         return pdf_path
+#     return None
+
+
+
+
+
+
+
+
+
+
+
+
+# ##take 4
+# # report_generator.py
+# import os
+# from typing import List, Dict, Any, Optional
+# from datetime import datetime
+
+# _WEASY_AVAILABLE = True
+# try:
+#     from weasyprint import HTML  # type: ignore
+# except Exception:
+#     _WEASY_AVAILABLE = False
+
+# # ---- Helpers ----
+
+# def _safe_filename(name: str) -> str:
+#     return "".join(c if c.isalnum() else "_" for c in name)
+
+# def _clean_agent_name(name: str) -> str:
+#     if not name: return ""
+#     return name[:-5] if name.endswith("Agent") else name
+
+# def _exclude_agent_name(name: str) -> bool:
+#     """
+#     Exclude the 4 agents by instruction (case/typo tolerant):
+#       - IDontKnow
+#       - Pronoun*
+#       - ShareCredit
+#       - PraiseHandling (aka 'precisehandling' typo)
+#     """
+#     n = (name or "").lower()
+#     return any(key in n for key in ["idontknow", "pronoun", "sharecredit", "praisehandling", "precisehandling"])
+
+# def _is_anti_humility(name: str) -> bool:
+#     """Agents that indicate anti-humility; invert them as (10 - score)."""
+#     n = (name or "").lower()
+#     return any(key in n for key in ["bragflag", "knowitall", "blameshift"])
+
+# def _agent_only_humility(llm_agents: List[Dict[str, Any]]) -> float:
+#     """
+#     Humility = normalized mean of remaining agents after exclusions.
+#     Anti‑humility agents are inverted as (10 - score).
+#     Everything clipped to [0, 10].
+#     """
+#     vals: List[float] = []
+#     for a in llm_agents or []:
+#         raw_name = str(a.get("agent_name", ""))
+#         if _exclude_agent_name(raw_name):
+#             continue
+#         try:
+#             s = float(a.get("score", 0.0))
+#         except Exception:
+#             s = 0.0
+#         s = max(0.0, min(10.0, s))
+#         if _is_anti_humility(raw_name):
+#             s = 10.0 - s
+#         vals.append(s)
+
+#     if not vals:
+#         return 0.0
+#     return round(sum(vals) / len(vals), 1)
+
+# def _score_class(v: float) -> str:
+#     if v >= 8: return "ok"
+#     if v >= 5: return "warn"
+#     return "bad"
+
+# # ---- HTML Builder ----
+
+# def build_full_report_html(
+#     analysis_payload: Dict[str, Any],
+#     llm_agents: List[Dict[str, Any]] | None = None
+# ) -> str:
+#     """
+#     PDF layout per latest rules:
+#       - Core Behavioral Traits: show ONLY Humility (computed from agents, excluding the 4, with inversion)
+#       - Detailed Response Analysis: per question show
+#           * Humility score
+#           * Learning score
+#           * Feedback (text)
+#       - LLM Agents table: hidden rows for the 4 excluded agents
+#     """
+#     candidate = analysis_payload["candidate_name"]
+#     gen_at = analysis_payload["generated_at"]
+#     turns  = analysis_payload["turns"]
+
+#     llm_agents = llm_agents or []
+
+#     # Compute humility from agents only (exclude 4; invert anti-humility)
+#     humility_final = _agent_only_humility(llm_agents)
+
+#     # Clean & filter the LLM table for display
+#     llm_rows = ""
+#     for a in llm_agents:
+#         name = str(a.get("agent_name", ""))
+#         if _exclude_agent_name(name):
+#             continue  # hide these rows entirely
+#         score = float(a.get("score", 0.0))
+#         ev = (a.get("evidence", "") or "").strip().replace("\n", " ")
+#         llm_rows += f"<tr><td>{_clean_agent_name(name)}</td><td>{score:.2f}</td><td><div style='color:#aab0b7;font-size:12px'>{ev}</div></td></tr>"
+
+#     style = """
+#     <style>
+#       :root{
+#         --bg:#0f1115; --card:#171a21; --ink:#e6e6e6; --muted:#9aa0a6;
+#         --primary:#4a90e2; --ok:#2ecc71; --warn:#f1c40f; --bad:#e74c3c; --border:#2a2f3a
+#       }
+#       body{font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);margin:0;padding:24px;}
+#       .wrap{max-width:980px;margin:0 auto;}
+#       .hdr{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+#       h1{margin:0 0 6px 0;color:var(--primary)}
+#       .meta{color:var(--muted);font-size:14px}
+#       .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+#       .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+#       .score{font-size:28px;font-weight:800;margin-top:8px}
+#       .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+#       .sec h2{color:var(--primary);margin:24px 0 8px 0}
+#       .q{color:var(--primary);font-weight:600}
+#       .ans{background:#1c212b;border-left:4px solid var(--primary);padding:12px;border-radius:8px;margin:8px 0}
+#       .trait{background:#181c25;border-left:3px solid var(--primary);padding:10px;border-radius:6px;margin:8px 0;color:#cfd3da}
+#       table{width:100%;border-collapse:collapse;border:1px solid var(--border)}
+#       th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left}
+#       th{color:var(--muted);font-weight:600}
+#       .fbtext{background:#1b202a;border-left:3px solid #58a6ff;padding:10px;border-radius:6px;margin-top:8px;color:#cfd3da}
+#       .note{color:var(--muted);font-size:12px;margin-top:6px}
+#     </style>
+#     """
+
+#     core_html = f"""
+#     <div class="card">
+#       <div>Humility</div>
+#       <div class="score {_score_class(humility_final)}">{humility_final:.1f}/10</div>
+#       <div class="note">Computed from LLM agents (excludes Pronoun, IDontKnow, ShareCredit, PraiseHandling); anti‑humility signals inverted.</div>
+#     </div>"""
+
+#     llm_table_html = f"""
+#     <div class="sec">
+#       <h2>LLM Agents — Detailed Scores</h2>
+#       <div class="card">
+#         <table>
+#           <thead><tr><th>Agent</th><th>Score</th><th>Evidence</th></tr></thead>
+#           <tbody>{llm_rows}</tbody>
+#         </table>
+#       </div>
+#     </div>"""
+
+#     # Per-question: Humility score + Learning score + Feedback text
+#     turns_html = ""
+#     for t in turns:
+#         hum = float(t["scores"]["humility"])
+#         lrn = float(t["scores"]["learning"])
+#         hum_ev = t["evidence"]["humility"]
+#         lrn_ev = t["evidence"]["learning"]
+#         fb_text = t.get("feedback_text", "")
+#         turns_html += f"""
+#         <div class="card">
+#           <div class="q">Q{t['index']}. {t['question']}</div>
+#           <div class="ans"><b>Response:</b> {t['answer']}</div>
+#           <div class="trait"><b>Humility</b><span style="float:right">{hum:.1f}/10</span>
+#               <div style="color:#aab0b7;font-size:12px;margin-top:4px">{hum_ev}</div>
+#           </div>
+#           <div class="trait"><b>Learning</b><span style="float:right">{lrn:.1f}/10</span>
+#               <div style="color:#aab0b7;font-size:12px;margin-top:4px">{lrn_ev}</div>
+#           </div>
+#           <div class="fbtext"><b>Feedback</b><br>{fb_text}</div>
+#         </div>"""
+
+#     html = f"""
+#     <!doctype html>
+#     <html><head><meta charset="utf-8"><title>Interview Report</title>{style}</head>
+#     <body><div class="wrap">
+#         <div class="hdr">
+#           <h1>Comprehensive Interview Analysis</h1>
+#           <div class="meta">{candidate} &nbsp;•&nbsp; Generated: {gen_at}</div>
+#         </div>
+
+#         <div class="sec">
+#           <h2>Core Behavioral Traits</h2>
+#           <div class="grid">{core_html}</div>
+#         </div>
+
+#         {llm_table_html}
+
+#         <div class="sec">
+#           <h2>Detailed Response Analysis</h2>
+#           <div class="grid" style="grid-template-columns:1fr">{turns_html}</div>
+#         </div>
+#     </div></body></html>
+#     """
+#     return html
+
+# def save_html_report(html: str, candidate_name: str, out_dir: str = "reports") -> str:
+#     os.makedirs(out_dir, exist_ok=True)
+#     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     path = os.path.join(out_dir, f"interview_report_{_safe_filename(candidate_name)}_{ts}.html")
+#     with open(path, "w", encoding="utf-8") as f:
+#         f.write(html)
+#     return path
+
+# def create_pdf_report_from_html(html: str, candidate_name: str, out_dir: str = "reports") -> Optional[str]:
+#     os.makedirs(out_dir, exist_ok=True)
+#     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     pdf_path = os.path.join(out_dir, f"interview_report_{_safe_filename(candidate_name)}_{ts}.pdf")
+#     if _WEASY_AVAILABLE:
+#         HTML(string=html).write_pdf(pdf_path)
+#         return pdf_path
+#     return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##take 5
 # report_generator.py
 import os
 from typing import List, Dict, Any, Optional
@@ -488,124 +976,67 @@ try:
 except Exception:
     _WEASY_AVAILABLE = False
 
-
-# -------------------------- helpers --------------------------
+EIGHT_HUMILITY_AGENTS = {
+    "admitmistake", "mindchange", "learnermindset",
+    "bragflag", "blameshift", "knowitall",
+    "feedbackacceptance", "supportgrowth"
+}
 
 def _safe_filename(name: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in name)
 
+def _base_name(name: str) -> str:
+    n = (name or "").lower()
+    if n.endswith("agent"):
+        n = n[:-5]
+    return n
+
 def _clean_agent_name(name: str) -> str:
-    if not name:
-        return ""
+    if not name: return ""
     return name[:-5] if name.endswith("Agent") else name
+
+def _exclude_from_table(name: str) -> bool:
+    # keep previous behavior: hide Pronoun*, IDontKnow, PraiseHandling from display table
+    n = (name or "").lower()
+    return any(k in n for k in ["pronoun","idontknow","praisehandling","precisehandling"])
+
+def _final_humility_from_llm(llm_agents: List[Dict[str, Any]]) -> float:
+    vals = []
+    for a in llm_agents or []:
+        base = _base_name(str(a.get("agent_name","")))
+        if base in EIGHT_HUMILITY_AGENTS:
+            try:
+                vals.append(float(a.get("score", 0.0)))
+            except Exception:
+                pass
+    return round(sum(vals) / len(vals), 1) if vals else 0.0
 
 def _score_class(v: float) -> str:
     if v >= 8: return "ok"
     if v >= 5: return "warn"
     return "bad"
 
-def _name_has(name_lower: str, needles: List[str]) -> bool:
-    return any(n in name_lower for n in needles)
-
-
-# ------------------- humility from LLM agents only -------------------
-
-def _humility_from_llm_only(
-    llm_agents: List[Dict[str, Any]],
-    fallback_parser_humility: float = 0.0
-) -> float:
-    """
-    Compute final Humility from LLM agents ONLY, excluding:
-      - IDontKnow
-      - Pronoun*
-      - ShareCredit
-      - PraiseHandling (typo-safe: also excludes 'precisehandling')
-
-    Anti-humility agents are inverted (10 - score):
-      - BragFlag, KnowItAll, BlameShift
-
-    If nothing remains after exclusion, fall back to parser humility average.
-    """
-    if not llm_agents:
-        return round(float(fallback_parser_humility), 1)
-
-    # Exclusions (case-insensitive, substring match)
-    exclude_needles = ["idontknow", "pronoun", "sharecredit", "praisehandling", "precisehandling"]
-
-    # Agents where a higher raw score means lower humility signal (invert)
-    invert_needles = ["bragflag", "knowitall", "blameshift"]
-
-    included_vals: List[float] = []
-    for a in llm_agents:
-        raw_name = str(a.get("agent_name", ""))
-        nl = raw_name.lower()
-
-        # skip explicit exclusions
-        if _name_has(nl, exclude_needles):
-            continue
-
-        # take score safely
-        try:
-            s = float(a.get("score", 0.0))
-        except Exception:
-            s = 0.0
-
-        # invert negative-signal agents
-        if _name_has(nl, invert_needles):
-            s = 10.0 - s
-
-        included_vals.append(s)
-
-    if not included_vals:
-        return round(float(fallback_parser_humility), 1)
-
-    final = sum(included_vals) / len(included_vals)
-    return round(max(0.0, min(10.0, final)), 1)
-
-
-# -------------------------- html builder --------------------------
-
 def build_full_report_html(
     analysis_payload: Dict[str, Any],
     llm_agents: List[Dict[str, Any]] | None = None
 ) -> str:
-    """
-    PDF layout per latest request:
-
-      - Core Behavioral Traits: show ONLY Humility, computed from LLM agents only,
-        excluding IDontKnow, Pronoun*, ShareCredit, and PraiseHandling/PreciseHandling.
-        (BragFlag/KnowItAll/BlameShift are inverted as 10 - score.)
-      - Detailed Response Analysis (per question): show Humility score, Learning score,
-        and Feedback (text). No Mistakes section.
-      - LLM Agents table: hide IDontKnow and PronounRatio rows; show others with names
-        cleaned (drop 'Agent' suffix).
-    """
-    candidate = analysis_payload.get("candidate_name", "Candidate")
-    gen_at = analysis_payload.get("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    overall = analysis_payload.get("overall_scores", {}) or {}
-    turns = analysis_payload.get("turns", []) or []
-
+    candidate = analysis_payload["candidate_name"]
+    gen_at = analysis_payload["generated_at"]
+    turns  = analysis_payload["turns"]
     llm_agents = llm_agents or []
 
-    # 1) Humility (Core) — from LLM agents only (with exclusions/inversions)
-    parser_humility_avg = float(overall.get("humility", 0.0))
-    humility_final = _humility_from_llm_only(llm_agents, fallback_parser_humility=parser_humility_avg)
+    final_humility = _final_humility_from_llm(llm_agents)
 
-    # 2) LLM agents table — hide IDontKnow & PronounRatio in display
-    hide_in_table_needles = ["idontknow", "pronoun"]
-    llm_agents_display = []
+    # LLM table rows (filtered)
+    llm_rows = ""
     for a in llm_agents:
-        raw_name = str(a.get("agent_name", ""))
-        nl = raw_name.lower()
-        if _name_has(nl, hide_in_table_needles):
+        name = str(a.get("agent_name",""))
+        if _exclude_from_table(name):
             continue
-        llm_agents_display.append({
-            "agent_name": _clean_agent_name(raw_name),
-            "score": float(a.get("score", 0.0)),
-            "evidence": a.get("evidence", "") or ""
-        })
+        score = float(a.get("score", 0.0))
+        ev = (a.get("evidence", "") or "").strip().replace("\n", " ")
+        llm_rows += f"<tr><td>{_clean_agent_name(name)}</td><td>{score:.2f}</td><td><div style='color:#aab0b7;font-size:12px'>{ev}</div></td></tr>"
 
-    # -------------------------- styles --------------------------
     style = """
     <style>
       :root{
@@ -633,36 +1064,25 @@ def build_full_report_html(
     </style>
     """
 
-    # ---------------------- core section (Humility only) ----------------------
     core_html = f"""
     <div class="card">
       <div>Humility</div>
-      <div class="score {_score_class(humility_final)}">{humility_final:.1f}/10</div>
-      <div class="note">
-        Computed from agent signals only; excludes IDontKnow, Pronoun*, ShareCredit, and PraiseHandling.
-        Anti‑humility agents (BragFlag/KnowItAll/BlameShift) are inverted.
-      </div>
+      <div class="score {_score_class(final_humility)}">{final_humility:.1f}/10</div>
+      <div class="note">Avg. of: AdmitMistake, MindChange, LearnerMindset, BragFlag, BlameShift, KnowItAll, FeedbackAcceptance, SupportGrowth.</div>
     </div>"""
 
-    # ---------------------- LLM Agents table (filtered) ----------------------
-    llm_rows = "".join(
-        f"<tr><td>{a['agent_name']}</td><td>{a['score']:.2f}</td>"
-        f"<td><div style='color:#aab0b7;font-size:12px'>{(a['evidence'] or '').strip()}</div></td></tr>"
-        for a in llm_agents_display
-    )
-    llm_html = f"""
+    llm_table_html = f"""
     <div class="sec">
       <h2>LLM Agents — Detailed Scores</h2>
       <div class="card">
         <table>
-          <thead><tr><th>Agent</th><th>Score</th><th>Evidence</th></tr></thead>
+          <thead><tr><th>Factor</th><th>Score</th><th>Evidence</th></tr></thead>
           <tbody>{llm_rows}</tbody>
         </table>
       </div>
     </div>"""
 
-    # ---------------------- per-question section ----------------------
-    # Show: Humility score + Learning score + Feedback text (no Mistakes)
+    # Per-question: humility (already stored as 8-agent avg in analyzer), learning, feedback text
     turns_html = ""
     for t in turns:
         hum = float(t["scores"]["humility"])
@@ -683,7 +1103,6 @@ def build_full_report_html(
           <div class="fbtext"><b>Feedback</b><br>{fb_text}</div>
         </div>"""
 
-    # ---------------------- assemble ----------------------
     html = f"""
     <!doctype html>
     <html><head><meta charset="utf-8"><title>Interview Report</title>{style}</head>
@@ -698,7 +1117,7 @@ def build_full_report_html(
           <div class="grid">{core_html}</div>
         </div>
 
-        {llm_html}
+        {llm_table_html}
 
         <div class="sec">
           <h2>Detailed Response Analysis</h2>
@@ -707,9 +1126,6 @@ def build_full_report_html(
     </div></body></html>
     """
     return html
-
-
-# -------------------------- save / export --------------------------
 
 def save_html_report(html: str, candidate_name: str, out_dir: str = "reports") -> str:
     os.makedirs(out_dir, exist_ok=True)

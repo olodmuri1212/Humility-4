@@ -360,37 +360,116 @@
 
 
 
+# ##take 5
+# import sys
+# import os
+# from typing import List, NamedTuple , Tuple
+# import asyncio
+# from backend.agents.humility_agent import analyze_humility 
+# from backend.agents.learning_agent import analyze_learning as analyze_learning_mindset
+# from backend.agents.feedback_agent import analyze_feedback_seeking
+# from backend.agents.mistake_agent import analyze_mistake_handling
+# # Add the project root to the Python path
+# # This allows us to import modules from 'core' and 'services'
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import sys
-import os
-from typing import List, NamedTuple , Tuple
-import asyncio
-from backend.agents.humility_agent import analyze_humility 
-from backend.agents.learning_agent import analyze_learning as analyze_learning_mindset
-from backend.agents.feedback_agent import analyze_feedback_seeking
-from backend.agents.mistake_agent import analyze_mistake_handling
-# Add the project root to the Python path
-# This allows us to import modules from 'core' and 'services'
+# from core.agents import (
+#     create_analysis_agent,
+#     pronoun_ratio_agent,
+#     i_dont_know_agent
+# )
+# from core.state import AgentScore
+# class AnalysisResult(NamedTuple):          
+#     """Container for the four agent outputs."""                                 
+#     humility_score: float                  
+#     humility_evidence: str                 
+#     learning_score: float                  
+#     learning_evidence: str                 
+#     feedback_score: float                  
+#     feedback_evidence: str                 
+#     mistakes_score: float                  
+#     mistakes_evidence: str 
+# # These are the LLM-based agents that will be run on each transcript.
+# # You can easily add or remove agents from this list to change the analysis.
+# LLM_AGENTS_TO_RUN = [
+#     "AdmitMistakeAgent",
+#     "MindChangeAgent",
+#     "ShareCreditAgent",
+#     "LearnerMindsetAgent",
+#     "BragFlagAgent",
+#     "BlameShiftAgent",
+#     "KnowItAllAgent",
+#     "FeedbackAcceptanceAgent",
+#     "SupportGrowthAgent",
+#     "PraiseHandlingAgent" # This would be triggered conditionally in a more advanced setup
+# ]
+
+# async def run_analysis_pipeline(transcript: str) -> List[AgentScore]:
+#     """
+#     Runs all relevant analysis agents on a given transcript.
+#     It runs simple parser-based agents and complex LLM-based agents in parallel.
+    
+#     Args:
+#         transcript: The text of the candidate's response.
+
+#     Returns:
+#         A list of AgentScore objects from all agents.
+#     """
+#     all_scores: List[AgentScore] = []
+#     print("--- Starting Analysis Pipeline ---")
+
+#     # --- 1. Run Simple Parser Agents (Fast, No LLM calls) ---
+#     # These are synchronous and fast, so we run them directly.
+#     try:
+#         all_scores.append(pronoun_ratio_agent(transcript))
+#         all_scores.append(i_dont_know_agent(transcript))
+#         print("Executed simple parser agents.")
+#     except Exception as e:
+#         print(f"Error in simple parser agents: {e}")
+        
+#     # --- 2. Run LLM-based Agents in Parallel ---
+#     llm_tasks = []
+#     for agent_name in LLM_AGENTS_TO_RUN:
+#         try:
+#             # Create the specific agent chain from the factory
+#             agent_chain = create_analysis_agent(agent_name)
+#             # Create an async task for each agent invocation. This schedules them to run concurrently.
+#             task = agent_chain.ainvoke({"transcript": transcript})
+#             llm_tasks.append((agent_name, task))
+#         except Exception as e:
+#             print(f"Error creating agent {agent_name}: {e}")
+
+#     print(f"Scheduled {len(llm_tasks)} LLM agents to run in parallel.")
+
+#     # Await all scheduled LLM agent tasks. `asyncio.gather` runs them concurrently.
+#     # `return_exceptions=True` prevents one failed agent from stopping all others.
+#     llm_results = await asyncio.gather(*(task for _, task in llm_tasks), return_exceptions=True)
+
+#     for i, result in enumerate(llm_results):
+#         agent_name = llm_tasks[i][0]
+#         if isinstance(result, Exception):
+#             all_scores.append({"agent_name": agent_name, "score": 0, "evidence": "Agent execution failed."})
+#         elif result and isinstance(result, dict):
+#             all_scores.append({
+#                 "agent_name": agent_name,
+#                 "score": result.get('score', 0),
+#                 "evidence": result.get('evidence', 'No evidence provided.')
+#             })
+#         else:
+#             all_scores.append({"agent_name": agent_name, "score": 0, "evidence": "Agent returned no output."})
+
+#     return all_scores
+
+
+
+# backend/agent_manager.py  (small hardening)
+import sys, os, asyncio
+from typing import List
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.agents import (
-    create_analysis_agent,
-    pronoun_ratio_agent,
-    i_dont_know_agent
-)
+from core.agents import create_analysis_agent, pronoun_ratio_agent, i_dont_know_agent
 from core.state import AgentScore
-class AnalysisResult(NamedTuple):          
-    """Container for the four agent outputs."""                                 
-    humility_score: float                  
-    humility_evidence: str                 
-    learning_score: float                  
-    learning_evidence: str                 
-    feedback_score: float                  
-    feedback_evidence: str                 
-    mistakes_score: float                  
-    mistakes_evidence: str 
-# These are the LLM-based agents that will be run on each transcript.
-# You can easily add or remove agents from this list to change the analysis.
+
 LLM_AGENTS_TO_RUN = [
     "AdmitMistakeAgent",
     "MindChangeAgent",
@@ -401,64 +480,46 @@ LLM_AGENTS_TO_RUN = [
     "KnowItAllAgent",
     "FeedbackAcceptanceAgent",
     "SupportGrowthAgent",
-    "PraiseHandlingAgent" # This would be triggered conditionally in a more advanced setup
+    "PraiseHandlingAgent"
 ]
 
-async def run_analysis_pipeline(transcript: str) -> List[AgentScore]:
-    """
-    Runs all relevant analysis agents on a given transcript.
-    It runs simple parser-based agents and complex LLM-based agents in parallel.
-    
-    Args:
-        transcript: The text of the candidate's response.
-
-    Returns:
-        A list of AgentScore objects from all agents.
-    """
-    all_scores: List[AgentScore] = []
-    print("--- Starting Analysis Pipeline ---")
-
-    # --- 1. Run Simple Parser Agents (Fast, No LLM calls) ---
-    # These are synchronous and fast, so we run them directly.
+async def run_analysis_pipeline(transcript: str) -> List[dict]:
+    all_scores: List[dict] = []
+    # simple parser agents (we still compute, even if later hidden in UI/PDF)
     try:
-        all_scores.append(pronoun_ratio_agent(transcript))
-        all_scores.append(i_dont_know_agent(transcript))
-        print("Executed simple parser agents.")
-    except Exception as e:
-        print(f"Error in simple parser agents: {e}")
-        
-    # --- 2. Run LLM-based Agents in Parallel ---
+        pr = pronoun_ratio_agent(transcript)
+        dk = i_dont_know_agent(transcript)
+        # normalize to dicts
+        all_scores.append({"agent_name": pr.agent_name if hasattr(pr, "agent_name") else "PronounRatioAgent",
+                           "score": float(pr.score if hasattr(pr, "score") else pr.get("score", 0)),
+                           "evidence": getattr(pr, "evidence", "") or pr.get("evidence", "")})
+        all_scores.append({"agent_name": dk.agent_name if hasattr(dk, "agent_name") else "IDontKnowAgent",
+                           "score": float(dk.score if hasattr(dk, "score") else dk.get("score", 0)),
+                           "evidence": getattr(dk, "evidence", "") or dk.get("evidence", "")})
+    except Exception:
+        pass
+
+    # schedule LLM agents
     llm_tasks = []
     for agent_name in LLM_AGENTS_TO_RUN:
         try:
-            # Create the specific agent chain from the factory
-            agent_chain = create_analysis_agent(agent_name)
-            # Create an async task for each agent invocation. This schedules them to run concurrently.
-            task = agent_chain.ainvoke({"transcript": transcript})
-            llm_tasks.append((agent_name, task))
-        except Exception as e:
-            print(f"Error creating agent {agent_name}: {e}")
+            chain = create_analysis_agent(agent_name)
+            llm_tasks.append((agent_name, chain.ainvoke({"transcript": transcript})))
+        except Exception:
+            all_scores.append({"agent_name": agent_name, "score": 0, "evidence": "Agent creation failed."})
 
-    print(f"Scheduled {len(llm_tasks)} LLM agents to run in parallel.")
-
-    # Await all scheduled LLM agent tasks. `asyncio.gather` runs them concurrently.
-    # `return_exceptions=True` prevents one failed agent from stopping all others.
-    llm_results = await asyncio.gather(*(task for _, task in llm_tasks), return_exceptions=True)
-
+    llm_results = await asyncio.gather(*(t for _, t in llm_tasks), return_exceptions=True)
     for i, result in enumerate(llm_results):
         agent_name = llm_tasks[i][0]
         if isinstance(result, Exception):
             all_scores.append({"agent_name": agent_name, "score": 0, "evidence": "Agent execution failed."})
-        elif result and isinstance(result, dict):
+        elif isinstance(result, dict):
             all_scores.append({
                 "agent_name": agent_name,
-                "score": result.get('score', 0),
-                "evidence": result.get('evidence', 'No evidence provided.')
+                "score": result.get("score", 0),
+                "evidence": result.get("evidence", "No evidence provided.")
             })
         else:
             all_scores.append({"agent_name": agent_name, "score": 0, "evidence": "Agent returned no output."})
 
     return all_scores
-
-
-

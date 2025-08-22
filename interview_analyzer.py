@@ -764,17 +764,244 @@
 
 
 
-##take3 
+# ##take3 
 
+# # interview_analyzer.py
+# import os
+# from datetime import datetime
+# from dataclasses import dataclass, field
+# from typing import List, Dict, Any
+
+# from backend.agents.humility_agent import analyze_humility
+# from backend.agents.learning_agent import analyze_learning
+# from backend.agents.feedback_agent import analyze_feedback  # text only
+
+# @dataclass
+# class InterviewTurn:
+#     question: str
+#     answer: str
+#     analysis: Dict[str, Any] = field(default_factory=dict)
+
+# @dataclass
+# class InterviewAnalysis:
+#     candidate_name: str
+#     date: str
+#     turns: List[InterviewTurn] = field(default_factory=list)
+#     overall_scores: Dict[str, float] = field(default_factory=dict)
+#     final_report: str = ""
+
+#     def to_dict(self) -> Dict[str, Any]:
+#         return {
+#             "candidate_name": self.candidate_name,
+#             "date": self.date,
+#             "turns": [
+#                 {"question": t.question, "answer": t.answer, "analysis": t.analysis}
+#                 for t in self.turns
+#             ],
+#             "overall_scores": self.overall_scores,
+#             "final_report": self.final_report
+#         }
+
+# class InterviewAnalyzer:
+#     def __init__(self, candidate_name: str = ""):
+#         self.candidate_name = candidate_name
+#         self.analysis = InterviewAnalysis(
+#             candidate_name=candidate_name,
+#             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#         )
+
+#     async def analyze_response(self, question: str, answer: str) -> Dict[str, Any]:
+#         if not answer.strip():
+#             return {"error": "Empty answer provided for analysis"}
+
+#         # Parser agents (async)
+#         humility_score, humility_evidence = await analyze_humility(answer)
+#         learning_score, learning_evidence = await analyze_learning(answer)
+#         feedback_text = await analyze_feedback(answer)  # text only, no score
+
+#         scores = {
+#             "humility": float(humility_score),
+#             "learning": float(learning_score)
+#         }
+
+#         analysis = {
+#             "scores": scores,
+#             "evidence": {
+#                 "humility": humility_evidence,
+#                 "learning": learning_evidence
+#             },
+#             "feedback_text": feedback_text
+#         }
+
+#         self.analysis.turns.append(InterviewTurn(question=question, answer=answer, analysis=analysis))
+#         return analysis
+
+#     def aggregate_scores(self) -> Dict[str, float]:
+#         # Only aggregate traits we actually keep per turn (Humility, Learning)
+#         buckets = {"humility": [], "learning": []}
+#         for t in self.analysis.turns:
+#             s = t.analysis["scores"]
+#             buckets["humility"].append(s["humility"])
+#             buckets["learning"].append(s["learning"])
+
+#         avgs = {
+#             "humility": round(sum(buckets["humility"]) / max(1, len(buckets["humility"])), 1),
+#             "learning": round(sum(buckets["learning"]) / max(1, len(buckets["learning"])), 1)
+#         }
+#         self.analysis.overall_scores = avgs
+#         return avgs
+
+#     def build_per_turn_blocks(self) -> List[Dict[str, Any]]:
+#         blocks = []
+#         for idx, t in enumerate(self.analysis.turns, 1):
+#             blocks.append({
+#                 "index": idx,
+#                 "question": t.question,
+#                 "answer": t.answer,
+#                 "scores": t.analysis["scores"],           # {humility, learning}
+#                 "evidence": t.analysis["evidence"],       # for humility, learning
+#                 "feedback_text": t.analysis["feedback_text"]
+#             })
+#         return blocks
+
+#     def to_summary_payload(self) -> Dict[str, Any]:
+#         return {
+#             "candidate_name": self.candidate_name,
+#             "generated_at": self.analysis.date,
+#             "overall_scores": self.aggregate_scores(),   # contains humility, learning
+#             "turns": self.build_per_turn_blocks(),
+#         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ##take 4
+# # interview_analyzer.py
+# from dataclasses import dataclass, field
+# from datetime import datetime
+# from typing import List, Dict, Any
+
+# from backend.agents.humility_agent import analyze_humility
+# from backend.agents.learning_agent import analyze_learning
+# from backend.agents.feedback_agent import analyze_feedback  # text only
+
+# @dataclass
+# class InterviewTurn:
+#     question: str
+#     answer: str
+#     analysis: Dict[str, Any] = field(default_factory=dict)
+
+# @dataclass
+# class InterviewAnalysis:
+#     candidate_name: str
+#     date: str
+#     turns: List[InterviewTurn] = field(default_factory=list)
+#     overall_scores: Dict[str, float] = field(default_factory=dict)
+#     final_report: str = ""
+
+# class InterviewAnalyzer:
+#     def __init__(self, candidate_name: str = ""):
+#         self.candidate_name = candidate_name
+#         self.analysis = InterviewAnalysis(
+#             candidate_name=candidate_name,
+#             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#         )
+
+#     async def analyze_response(self, question: str, answer: str) -> Dict[str, Any]:
+#         if not answer.strip():
+#             return {"error": "Empty answer provided for analysis"}
+
+#         hum_score, hum_ev = await analyze_humility(answer)
+#         lrn_score, lrn_ev = await analyze_learning(answer)
+#         fb_text = await analyze_feedback(answer)
+
+#         analysis = {
+#             "scores": {"humility": float(hum_score), "learning": float(lrn_score)},
+#             "evidence": {"humility": hum_ev, "learning": lrn_ev},
+#             "feedback_text": fb_text
+#         }
+#         self.analysis.turns.append(InterviewTurn(question=question, answer=answer, analysis=analysis))
+#         return analysis
+
+#     def aggregate_scores(self) -> Dict[str, float]:
+#         buckets = {"humility": [], "learning": []}
+#         for t in self.analysis.turns:
+#             s = t.analysis["scores"]
+#             buckets["humility"].append(s["humility"])
+#             buckets["learning"].append(s["learning"])
+#         self.analysis.overall_scores = {
+#             "humility": round(sum(buckets["humility"]) / max(1, len(buckets["humility"])), 1),
+#             "learning": round(sum(buckets["learning"]) / max(1, len(buckets["learning"])), 1),
+#         }
+#         return self.analysis.overall_scores
+
+#     def build_per_turn_blocks(self) -> List[Dict[str, Any]]:
+#         rows = []
+#         for idx, t in enumerate(self.analysis.turns, 1):
+#             rows.append({
+#                 "index": idx,
+#                 "question": t.question,
+#                 "answer": t.answer,
+#                 "scores": t.analysis["scores"],      # humility, learning
+#                 "evidence": t.analysis["evidence"],
+#                 "feedback_text": t.analysis["feedback_text"]
+#             })
+#         return rows
+
+#     def to_summary_payload(self) -> Dict[str, Any]:
+#         return {
+#             "candidate_name": self.candidate_name,
+#             "generated_at": self.analysis.date,
+#             "overall_scores": self.aggregate_scores(),
+#             "turns": self.build_per_turn_blocks(),
+#         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##take 5
 # interview_analyzer.py
-import os
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Dict, Any
 
-from backend.agents.humility_agent import analyze_humility
+from backend.agent_manager import run_analysis_pipeline  # <-- use LLM agents
+from backend.agents.humility_agent import analyze_humility  # keep if you want to compare/retain
 from backend.agents.learning_agent import analyze_learning
 from backend.agents.feedback_agent import analyze_feedback  # text only
+
+# Map normalized names for selection
+EIGHT_HUMILITY_AGENTS = {
+    "admitmistake", "mindchange", "learnermindset",
+    "bragflag", "blameshift", "knowitall",
+    "feedbackacceptance", "supportgrowth"
+}
+
+def _base_name(agent_name: str) -> str:
+    n = (agent_name or "").lower()
+    if n.endswith("agent"):
+        n = n[:-5]
+    return n
 
 @dataclass
 class InterviewTurn:
@@ -790,18 +1017,6 @@ class InterviewAnalysis:
     overall_scores: Dict[str, float] = field(default_factory=dict)
     final_report: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "candidate_name": self.candidate_name,
-            "date": self.date,
-            "turns": [
-                {"question": t.question, "answer": t.answer, "analysis": t.analysis}
-                for t in self.turns
-            ],
-            "overall_scores": self.overall_scores,
-            "final_report": self.final_report
-        }
-
 class InterviewAnalyzer:
     def __init__(self, candidate_name: str = ""):
         self.candidate_name = candidate_name
@@ -810,65 +1025,84 @@ class InterviewAnalyzer:
             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
 
+    async def _llm_8agent_avg(self, text: str) -> float:
+        """
+        Run LLM agents on a single answer and average the specified 8 agents only.
+        No inversion, no PraiseHandling.
+        """
+        try:
+            results = await run_analysis_pipeline(text)  # list of dicts or AgentScore-like
+        except Exception:
+            results = []
+
+        vals = []
+        for r in results:
+            name = getattr(r, "agent_name", None) or r.get("agent_name", "")
+            base = _base_name(name)
+            if base in EIGHT_HUMILITY_AGENTS:
+                try:
+                    vals.append(float(getattr(r, "score", None) if hasattr(r, "score") else r.get("score", 0)))
+                except Exception:
+                    pass
+
+        return round(sum(vals) / len(vals), 1) if vals else 0.0
+
     async def analyze_response(self, question: str, answer: str) -> Dict[str, Any]:
         if not answer.strip():
             return {"error": "Empty answer provided for analysis"}
 
-        # Parser agents (async)
-        humility_score, humility_evidence = await analyze_humility(answer)
-        learning_score, learning_evidence = await analyze_learning(answer)
-        feedback_text = await analyze_feedback(answer)  # text only, no score
+        # Per-question humility from the 8 LLM agents:
+        hum_8 = await self._llm_8agent_avg(answer)
 
-        scores = {
-            "humility": float(humility_score),
-            "learning": float(learning_score)
-        }
+        # Learning via parser:
+        lrn_score, lrn_ev = await analyze_learning(answer)
+
+        # Optional: keep parser humility evidence for transparency (not scored):
+        _, hum_ev_parser = await analyze_humility(answer)
+
+        # Per-question feedback text:
+        fb_text = await analyze_feedback(answer)
 
         analysis = {
-            "scores": scores,
+            "scores": {"humility": float(hum_8), "learning": float(lrn_score)},
             "evidence": {
-                "humility": humility_evidence,
-                "learning": learning_evidence
+                "humility": f"Computed as avg of 8 agents: {', '.join(sorted(a.title() for a in EIGHT_HUMILITY_AGENTS))}. Parser notes: {hum_ev_parser}",
+                "learning": lrn_ev
             },
-            "feedback_text": feedback_text
+            "feedback_text": fb_text
         }
-
         self.analysis.turns.append(InterviewTurn(question=question, answer=answer, analysis=analysis))
         return analysis
 
     def aggregate_scores(self) -> Dict[str, float]:
-        # Only aggregate traits we actually keep per turn (Humility, Learning)
         buckets = {"humility": [], "learning": []}
         for t in self.analysis.turns:
             s = t.analysis["scores"]
             buckets["humility"].append(s["humility"])
             buckets["learning"].append(s["learning"])
-
-        avgs = {
+        self.analysis.overall_scores = {
             "humility": round(sum(buckets["humility"]) / max(1, len(buckets["humility"])), 1),
-            "learning": round(sum(buckets["learning"]) / max(1, len(buckets["learning"])), 1)
+            "learning": round(sum(buckets["learning"]) / max(1, len(buckets["learning"])), 1),
         }
-        self.analysis.overall_scores = avgs
-        return avgs
+        return self.analysis.overall_scores
 
     def build_per_turn_blocks(self) -> List[Dict[str, Any]]:
-        blocks = []
+        rows = []
         for idx, t in enumerate(self.analysis.turns, 1):
-            blocks.append({
+            rows.append({
                 "index": idx,
                 "question": t.question,
                 "answer": t.answer,
-                "scores": t.analysis["scores"],           # {humility, learning}
-                "evidence": t.analysis["evidence"],       # for humility, learning
+                "scores": t.analysis["scores"],      # humility (8-agent avg), learning
+                "evidence": t.analysis["evidence"],
                 "feedback_text": t.analysis["feedback_text"]
             })
-        return blocks
+        return rows
 
     def to_summary_payload(self) -> Dict[str, Any]:
         return {
             "candidate_name": self.candidate_name,
             "generated_at": self.analysis.date,
-            "overall_scores": self.aggregate_scores(),   # contains humility, learning
+            "overall_scores": self.aggregate_scores(),
             "turns": self.build_per_turn_blocks(),
         }
-

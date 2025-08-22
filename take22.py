@@ -329,29 +329,23 @@
 
 
 
-
-# interview_app.py
+##hey asap1279
+# interview_gradio_app.py
 import os
 import numpy as np
 import torch
 import gradio as gr
 import librosa
-import asyncio
 from faster_whisper import WhisperModel
 from datetime import datetime
-from io import BytesIO
-import soundfile as sf
 
-# Your existing modules (make sure these import paths match your repo)
 from interview_state import SessionState, Turn
 from interview_analyzer import InterviewAnalyzer
-from backend.agent_manager import run_analysis_pipeline  # returns list of dicts [{'agent_name':..., 'score':...}, ...]
-import report_double_generate
+from backend.agent_manager import run_analysis_pipeline
+from report_generator import build_full_report_html, save_html_report, create_pdf_report_from_html
 
-# Make sure reports dir exists
 os.makedirs("reports", exist_ok=True)
 
-# Questions (same as before)
 QUESTIONS = [
     "1) Can you tell me about a time when you received constructive criticism? How did you handle it?",
     "2) Describe a situation where you had to work with a difficult team member. How did you handle it?",
@@ -360,52 +354,35 @@ QUESTIONS = [
     "5) Can you share an example of when you had to adapt to a significant change at work?"
 ]
 
-# Whisper model setup
 MODEL_SIZE = "base"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-whisper_model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8" if DEVICE == "cuda" else "int8")
+whisper_model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8")
 
-# Session/State
-session = SessionState()  # re-use your existing SessionState dataclass
+session = SessionState()
 analyzer: InterviewAnalyzer | None = None
 
-# --- Helpers ---
-
 def preprocess_audio(audio_data):
-    """Convert gr.Audio numpy → float32 mono @16kHz."""
     if audio_data is None:
         return np.zeros((0,), dtype=np.float32)
-
     sr, arr = audio_data
     if arr is None:
         return np.zeros((0,), dtype=np.float32)
-
-    # if stereo, convert to mono
     if arr.ndim > 1 and arr.shape[1] == 2:
         arr = arr.mean(axis=1)
-
-    # normalize to float32
     if arr.dtype != np.float32:
-        # if integer type, convert to float32
         if np.issubdtype(arr.dtype, np.integer):
             arr = arr.astype(np.float32) / np.iinfo(arr.dtype).max
         else:
             arr = arr.astype(np.float32)
-
     if sr != 16000:
         arr = librosa.resample(arr, orig_sr=sr, target_sr=16000)
-
     return arr
 
 async def transcribe(audio_data):
-    """Run Whisper on raw audio asynchronously."""
     audio = preprocess_audio(audio_data)
     try:
         segments, _ = whisper_model.transcribe(
-            audio,
-            language="en",
-            beam_size=5,
-            vad_filter=True
+            audio, language="en", beam_size=5, vad_filter=True
         )
         return " ".join(seg.text for seg in segments).strip()
     except Exception as e:
@@ -414,151 +391,283 @@ async def transcribe(audio_data):
 
 async def run_cumulative_agent_analysis(answers_list):
     """
-    Send concatenated answers to `run_analysis_pipeline` and return structured breakdown:
-    returns tuple (per_agent_list, overall_avg)
-    per_agent_list: list of dicts [{'agent_name':'AgentHumility', 'score': 7}, ...]
+    Returns per_agent list from LLM agents and overall average.
+    Handles AgentScore dataclass or dict.
     """
     if not answers_list:
         return [], 0.0
 
     transcript = "\n".join(answers_list)
     try:
-        scores = await run_analysis_pipeline(transcript)  # expecting list of dicts
+        scores = await run_analysis_pipeline(transcript)
     except Exception as e:
-        print(f"[run_cumulative_agent_analysis] run_analysis_pipeline failed: {e}")
+        print(f"[run_cumulative_agent_analysis] failed: {e}")
         scores = []
 
-    # Normalize and compute overall average
-    per_agent = []
-    total = 0.0
-    count = 0
+    per_agent, total, count = [], 0.0, 0
     for item in scores:
-        if isinstance(item, dict):
-            agent_name = item.get("agent_name", "Unknown")
-            score_val = item.get("score", 0)
-            # try to parse numeric scores
+        # item could be a dataclass or dict
+        try:
+            agent_name = getattr(item, "agent_name", None) or item.get("agent_name", "Unknown")
+            score_val = getattr(item, "score", None) if hasattr(item, "score") else item.get("score", 0)
+            evidence = getattr(item, "evidence", None) if hasattr(item, "evidence") else item.get("evidence", "")
+        except Exception:
+            agent_name, score_val, evidence = "Unknown", 0, ""
+
+        try:
+            score_num = float(score_val)
+        except Exception:
             try:
-                score_num = float(score_val)
+                score_num = float(int(score_val))
             except Exception:
-                try:
-                    score_num = float(int(score_val))
-                except Exception:
-                    score_num = 0.0
-            per_agent.append({"agent_name": agent_name, "score": score_num})
-            total += score_num
-            count += 1
+                score_num = 0.0
+
+        per_agent.append({"agent_name": agent_name, "score": score_num, "evidence": evidence})
+        total += score_num
+        count += 1
 
     overall_avg = (total / count) if count > 0 else 0.0
     return per_agent, overall_avg
 
-# Use InterviewAnalyzer to keep per-turn detailed analyses for the final report
 async def analyze_and_store_turn(question, answer_text):
     global analyzer
     if analyzer is None:
         analyzer = InterviewAnalyzer(candidate_name=getattr(session, "candidate_name", "Candidate"))
     try:
-        # analyzer.analyze_response appends the analyzed turn to analyzer.analysis.turns internally
-        _ = await analyzer.analyze_response(question, answer_text)
+        await analyzer.analyze_response(question, answer_text)
     except Exception as e:
         print(f"[analyze_and_store_turn] error: {e}")
 
-# --- Gradio UI handlers ---
-
 def start_interview(name: str):
-    """Initialize session and analyzer."""
     session.reset()
     session.candidate_name = name.strip() or "Candidate"
-    session.turns = []  # ensure list exists
+    session.turns = []
     session.start_time = datetime.now().isoformat()
-    # Instantiate analyzer
+
     global analyzer
     analyzer = InterviewAnalyzer(candidate_name=session.candidate_name)
-    # initial UI states
+
     first_q = QUESTIONS[0]
     status_msg = f"Hello {session.candidate_name}. Starting interview."
     return status_msg, first_q, gr.update(visible=True), gr.update(visible=True), ""
+##tak4
+# def _format_live_md(per_agent, _overall_avg_not_used):
+#     # filter out Pronoun*/IDontKnow for display AND for the average
+#     shown = [a for a in per_agent if not _hide_in_live_table(a.get("agent_name", ""))]
+#     if shown:
+#         avg = sum(float(a.get("score", 0.0)) for a in shown) / len(shown)
+#     else:
+#         avg = 0.0
+
+#     md = f"### Live Progress\n\n**LLM Agents Avg (filtered):** **{avg:.2f} / 10**\n\n"
+#     md += "| Agent | Score |\n|---|:---:|\n"
+#     for a in shown:
+#         md += f"| {_clean_agent_name(a.get('agent_name',''))} | {float(a.get('score',0.0)):.2f} |\n"
+#     return md
+
+##take 5
+def _format_live_md(per_agent, _overall_avg_not_used):
+    shown = [a for a in per_agent if not _hide_in_live_table(a.get("agent_name",""))]
+    live_avg = (sum(float(a.get("score",0.0)) for a in shown) / len(shown)) if shown else 0.0
+
+    md = f"### Live Progress\n\n**LLM Agents Avg (filtered):** **{live_avg:.2f} / 10**\n\n"
+    md += "| Agent | Score |\n|---|:---:|\n"
+    for a in shown:
+        md += f"| {_clean_agent_name(a.get('agent_name',''))} | {float(a.get('score',0.0)):.2f} |\n"
+    return md
+
+
+
+# def _format_final_table_md(llm_agents, analyzer_payload):
+#     # LLM agents
+#     md = "## Final Agentic Analysis Summary\n\n"
+#     md += "### LLM Agents\n\n"
+#     md += "| Agent | Score | Evidence |\n|---|:---:|---|\n"
+#     for a in llm_agents:
+#         ev = (a.get("evidence") or "").replace("\n"," ").strip()
+#         md += f"| {a.get('agent_name','')} | {a.get('score',0):.2f} | {ev[:180]}{'…' if len(ev)>180 else ''} |\n"
+
+#     # Four HR traits (averages)
+#     ov = analyzer_payload["overall_scores"]
+#     md += "\n\n### Core Behavioral Traits (Average)\n\n"
+#     md += "| Trait | Score |\n|---|:---:|\n"
+#     for k in ["humility","learning","feedback","mistakes"]:
+#         md += f"| {k.capitalize()} | {ov.get(k,0):.1f} |\n"
+
+#     # suggestions
+#     tips = analyzer_payload["summary_suggestions"]
+#     md += "\n\n### Suggestions\n\n"
+#     for s in tips:
+#         md += f"- {s}\n"
+#     return md
+
+# ---- replace this whole function in interview_gradio_app.py ----
+# --- helpers for agent filtering / display ---
+
+# --- Agent display / selection helpers ---
+
+EIGHT_HUMILITY_AGENTS = {
+    "admitmistake", "mindchange", "learnermindset",
+    "bragflag", "blameshift", "knowitall",
+    "feedbackacceptance", "supportgrowth"
+}
+
+def _base_name(name: str) -> str:
+    n = (name or "").lower()
+    return n[:-5] if n.endswith("agent") else n
+
+def _clean_agent_name(name: str) -> str:
+    if not name: return ""
+    return name[:-5] if name.endswith("Agent") else name
+
+def _hide_in_live_table(name: str) -> bool:
+    n = (name or "").lower()
+    return ("pronoun" in n) or ("idontknow" in n)
+
+def _final_humility_from_llm(llm_agents: list[dict]) -> float:
+    vals = []
+    for a in llm_agents or []:
+        base = _base_name(a.get("agent_name",""))
+        if base in EIGHT_HUMILITY_AGENTS:
+            try:
+                vals.append(float(a.get("score", 0.0)))
+            except Exception:
+                pass
+    return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+
+def _exclude_agent_name(name: str) -> bool:
+    n = (name or "").lower()
+    return any(key in n for key in ["idontknow", "pronoun", "sharecredit", "praisehandling", "precisehandling"])
+
+
+def _is_anti_humility(name: str) -> bool:
+    n = (name or "").lower()
+    return any(k in n for k in ["bragflag", "knowitall", "blameshift"])
+
+def _agent_only_humility(llm_agents: list[dict]) -> float:
+    vals = []
+    for a in llm_agents or []:
+        name = str(a.get("agent_name", ""))
+        if _exclude_agent_name(name):
+            continue
+        try:
+            s = float(a.get("score", 0.0))
+        except Exception:
+            s = 0.0
+        s = max(0.0, min(10.0, s))
+        if _is_anti_humility(name):
+            s = 10.0 - s
+        vals.append(s)
+    return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+##take 4
+# def _format_final_table_md(llm_agents, analyzer_payload):
+#     """
+#     Final on-screen summary:
+#       - LLM Agents table: hide Pronoun*, IDontKnow, ShareCredit, PraiseHandling
+#       - Core summary: show ONLY Humility computed from included agents
+#     """
+#     # LLM table (filtered + cleaned names)
+#     md = "## Final Agentic Analysis Summary\n\n"
+#     md += "### LLM Agents\n\n"
+#     md += "| Agent | Score | Evidence |\n|---|:---:|---|\n"
+#     for a in llm_agents:
+#         name = str(a.get("agent_name",""))
+#         if _exclude_agent_name(name):
+#             continue
+#         score = float(a.get("score", 0.0))
+#         ev = (a.get("evidence") or "").replace("\n", " ").strip()
+#         md += f"| {_clean_agent_name(name)} | {score:.2f} | {ev[:180]}{'…' if len(ev)>180 else ''} |\n"
+
+#     # Core (Humility only) from agents
+#     hum = _agent_only_humility(llm_agents)
+#     md += "\n\n### Core Behavioral Traits (Summary)\n\n"
+#     md += "| Trait | Score |\n|---|:---:|\n"
+#     md += f"| Humility | {hum:.1f} |\n"
+
+#     return md
+def _format_final_table_md(llm_agents, analyzer_payload):
+    md = "## Final Agentic Analysis Summary\n\n"
+    md += "### LLM Agents\n\n"
+    md += "| Agent | Score | Evidence |\n|---|:---:|---|\n"
+    for a in llm_agents:
+        name = str(a.get("agent_name",""))
+        # keep table cleaner (optional): hide pronoun/idontknow/praisehandling like PDF
+        if any(k in name.lower() for k in ["pronoun","idontknow","praisehandling","precisehandling"]):
+            continue
+        score = float(a.get("score", 0.0))
+        ev = (a.get("evidence") or "").replace("\n", " ").strip()
+        md += f"| {_clean_agent_name(name)} | {score:.2f} | {ev[:180]}{'…' if len(ev)>180 else ''} |\n"
+
+    hum = _final_humility_from_llm(llm_agents)
+    md += "\n\n### Core Behavioral Traits (Summary)\n\n"
+    md += "| Trait | Score |\n|---|:---:|\n"
+    md += f"| Humility | {hum:.1f} |\n"
+    return md
+
 
 async def submit_answer(audio_data):
-    """
-    Called when user clicks Submit Answer.
-    - transcribe
-    - append to session.turns
-    - run per-turn detailed analysis (stores into analyzer)
-    - run cumulative agent analysis across answers so far and return formatted live breakdown
-    """
     if audio_data is None:
         return "No audio received. Please record an answer.", "", "", gr.update(visible=True), gr.update(visible=True)
 
-    # transcribe
     transcript = await transcribe(audio_data)
-
     if transcript.strip() == "":
         return "Could not transcribe audio. Try again.", "", "", gr.update(visible=True), gr.update(visible=True)
 
-    # store turn (simple Turn dataclass usage)
-    # idx = len(session.turns)
-    # turn = Turn(question=QUESTIONS[idx], audio_data=audio_data, transcript=transcript)
-    # session.turns.append(turn)
     current_index = len(session.turns)
-
     if current_index < len(QUESTIONS):
-        turn = Turn(
-            question=QUESTIONS[current_index],
-            audio_data=audio_data,
-            transcript=transcript
-        )
+        turn = Turn(question=QUESTIONS[current_index], audio_data=audio_data, transcript=transcript)
         session.turns.append(turn)
     else:
-        # All  questions answered — trigger final report generation
-        final_results = analyze_answers([t.transcript for t in session.turns])
-        pdf_path = generate_pdf_report(final_results)
-        return None, final_results, pdf_path
+        # Safety: should not happen
+        pass
 
+    await analyze_and_store_turn(session.turns[-1].question, session.turns[-1].transcript)
 
-
-    # Fire and forget per-turn detailed analyzer (but await to ensure stored)
-    await analyze_and_store_turn(turn.question, turn.transcript)
-
-    # Build answers list so far for cumulative analysis
+    # Build answers list so far for LLM agents
     answers_so_far = [t.transcript for t in session.turns]
-
     per_agent, overall_avg = await run_cumulative_agent_analysis(answers_so_far)
 
-    # Format live progress text (markdown)
-    md = f"### Live Progress (after {len(answers_so_far)} answer(s))\n\n"
-    md += f"**Cumulative Overall Average:** **{overall_avg:.2f} / 10**\n\n"
-    md += "| Agent | Score |\n|---:|:---:|\n"
-    for p in per_agent:
-        md += f"| {p['agent_name']} | {p['score']:.2f} |\n"
-
-    # prepare next question or finish
-    if len(session.turns) < len(QUESTIONS):
-        next_q = QUESTIONS[len(session.turns)]
-        status = f"Recorded Q{len(session.turns)}. Moving to next question."
-        show_generate = False
-    else:
-        next_q = "All questions completed. Click 'Generate Final Report' to create PDF/HTML."
-        status = "Interview complete."
+    # If finished, show final full summary table (+ suggestions) and enable report button
+    if len(session.turns) == len(QUESTIONS):
+        payload = analyzer.to_summary_payload()
+        final_md = _format_final_table_md(per_agent, payload)
+        next_q = "All questions completed."
+        status = "Interview complete. You can now generate the final PDF report."
         show_generate = True
+        return transcript, next_q, final_md, gr.update(visible=show_generate), gr.update(visible=show_generate)
 
-    return transcript, next_q, md, gr.update(visible=show_generate), gr.update(visible=show_generate)
+    # Otherwise, normal live progress
+    next_q = QUESTIONS[len(session.turns)]
+    status = f"Recorded Q{len(session.turns)}. Moving to next question."
+    show_generate = False
+    live_md = _format_live_md(per_agent, overall_avg)
+    return transcript, next_q, live_md, gr.update(visible=show_generate), gr.update(visible=show_generate)
 
 async def generate_final_report_and_pdf():
     """
-    Create final HTML via analyzer.generate_report and convert to PDF.
+    Builds HTML from analyzer + LLM agents, saves HTML, tries to create PDF.
     Returns (html_str, html_path, pdf_path_or_none)
     """
     if analyzer is None or not analyzer.analysis.turns:
         return "No interview data available. Please run the interview first.", None, None
 
-    # Make sure overall scores are computed
-    html = analyzer.generate_report(format="html")
-    html_path = report_generator.save_html_report(html, analyzer.candidate_name)
-    pdf_path = report_generator.create_pdf_report_from_html(html, analyzer.candidate_name)
+    # Collect LLM agent results on all answers (final)
+    answers_all = [t.transcript for t in session.turns]
+    llm_agents, _ = await run_cumulative_agent_analysis(answers_all)
 
-    return html, html_path, pdf_path
+    # Build final HTML from payload
+    payload = analyzer.to_summary_payload()
+    html = build_full_report_html(payload, llm_agents=llm_agents)
+    html_path = save_html_report(html, analyzer.candidate_name)
+    pdf_path = create_pdf_report_from_html(html, analyzer.candidate_name)
 
-# --- Gradio UI ---
+    if pdf_path is None:
+        # WeasyPrint not installed; still return HTML and tell user
+        html += "<!-- PDF generation unavailable (WeasyPrint not installed). -->"
+
+    return html, html_path, (pdf_path or None)
 
 with gr.Blocks(title="🎙️ Interview + Live Cumulative Analysis + PDF Report") as demo:
     gr.Markdown("## Interview Assistant — live per-agent breakdown and final PDF report")
@@ -582,21 +691,18 @@ with gr.Blocks(title="🎙️ Interview + Live Cumulative Analysis + PDF Report"
             download_html = gr.File(label="Download HTML report")
             download_pdf = gr.File(label="Download PDF report")
 
-    # Start interview
     start_btn.click(
         fn=start_interview,
         inputs=[name_input],
         outputs=[status, question_display, audio_input, submit_btn, live_progress]
     )
 
-    # When user clicks Submit Answer
     submit_btn.click(
         fn=submit_answer,
         inputs=[audio_input],
         outputs=[transcript_box, question_display, live_progress, generate_report_btn, generate_report_btn]
     )
 
-    # Generate final report
     generate_report_btn.click(
         fn=generate_final_report_and_pdf,
         inputs=None,
@@ -604,4 +710,4 @@ with gr.Blocks(title="🎙️ Interview + Live Cumulative Analysis + PDF Report"
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="localhost", server_port=7860)
+    demo.launch(server_name="localhost", server_port=7861)
