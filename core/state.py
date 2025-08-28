@@ -74,6 +74,57 @@
 
 
 
+# from typing import Dict, List, Optional
+# from pydantic import BaseModel, Field
+# from typing_extensions import TypedDict
+
+# class AgentScore(TypedDict):
+#     """Score and evidence from a single analysis agent."""
+#     agent_name: str
+#     score: float
+#     evidence: str
+
+# class ConversationTurn(BaseModel):
+#     """A single question-answer turn in the interview."""
+#     question: str
+#     transcript: str
+#     analysis_results: List[AgentScore] = Field(default_factory=list)
+
+# class InterviewState(BaseModel):
+#     """Complete state of an interview session."""
+#     candidate_name: str
+#     normalized_humility_score: float = 0.0
+#     cumulative_scores: Dict[str, float] = Field(default_factory=dict)
+#     conversation_history: List[ConversationTurn] = Field(default_factory=list)
+
+#     def to_dict(self) -> Dict:
+#         """Convert the interview state to a dictionary for JSON serialization."""
+#         return {
+#             "candidate_name": self.candidate_name,
+#             "normalized_humility_score": self.normalized_humility_score,
+#             "cumulative_scores": self.cumulative_scores,
+#             "conversation_history": [t.dict() for t in self.conversation_history],
+#         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
