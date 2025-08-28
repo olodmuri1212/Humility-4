@@ -979,29 +979,173 @@
 
 
 
-##take 5
+# ##take 5
+# # interview_analyzer.py
+# from dataclasses import dataclass, field
+# from datetime import datetime
+# from typing import List, Dict, Any
+
+# from backend.agent_manager import run_analysis_pipeline  # <-- use LLM agents
+# from backend.agents.humility_agent import analyze_humility  # keep if you want to compare/retain
+# from backend.agents.learning_agent import analyze_learning
+# from backend.agents.feedback_agent import analyze_feedback  # text only
+
+# # Map normalized names for selection
+# EIGHT_HUMILITY_AGENTS = {
+#     "admitmistake", "mindchange", "learnermindset",
+#     "bragflag", "blameshift", "knowitall",
+#     "feedbackacceptance", "supportgrowth"
+# }
+
+# def _base_name(agent_name: str) -> str:
+#     n = (agent_name or "").lower()
+#     if n.endswith("agent"):
+#         n = n[:-5]
+#     return n
+
+# @dataclass
+# class InterviewTurn:
+#     question: str
+#     answer: str
+#     analysis: Dict[str, Any] = field(default_factory=dict)
+
+# @dataclass
+# class InterviewAnalysis:
+#     candidate_name: str
+#     date: str
+#     turns: List[InterviewTurn] = field(default_factory=list)
+#     overall_scores: Dict[str, float] = field(default_factory=dict)
+#     final_report: str = ""
+
+# class InterviewAnalyzer:
+#     def __init__(self, candidate_name: str = ""):
+#         self.candidate_name = candidate_name
+#         self.analysis = InterviewAnalysis(
+#             candidate_name=candidate_name,
+#             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#         )
+
+#     async def _llm_8agent_avg(self, text: str) -> float:
+#         """
+#         Run LLM agents on a single answer and average the specified 8 agents only.
+#         No inversion, no PraiseHandling.
+#         """
+#         try:
+#             results = await run_analysis_pipeline(text)  # list of dicts or AgentScore-like
+#         except Exception:
+#             results = []
+
+#         vals = []
+#         for r in results:
+#             name = getattr(r, "agent_name", None) or r.get("agent_name", "")
+#             base = _base_name(name)
+#             if base in EIGHT_HUMILITY_AGENTS:
+#                 try:
+#                     vals.append(float(getattr(r, "score", None) if hasattr(r, "score") else r.get("score", 0)))
+#                 except Exception:
+#                     pass
+
+#         return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+#     async def analyze_response(self, question: str, answer: str) -> Dict[str, Any]:
+#         if not answer.strip():
+#             return {"error": "Empty answer provided for analysis"}
+
+#         # Per-question humility from the 8 LLM agents:
+#         hum_8 = await self._llm_8agent_avg(answer)
+
+#         # Learning via parser:
+#         lrn_score, lrn_ev = await analyze_learning(answer)
+
+#         # Optional: keep parser humility evidence for transparency (not scored):
+#         _, hum_ev_parser = await analyze_humility(answer)
+
+#         # Per-question feedback text:
+#         fb_text = await analyze_feedback(answer)
+
+#         analysis = {
+#             "scores": {"humility": float(hum_8), "learning": float(lrn_score)},
+#             "evidence": {
+#                 "humility": f"Computed as avg of 8 agents: {', '.join(sorted(a.title() for a in EIGHT_HUMILITY_AGENTS))}. Parser notes: {hum_ev_parser}",
+#                 "learning": lrn_ev
+#             },
+#             "feedback_text": fb_text
+#         }
+#         self.analysis.turns.append(InterviewTurn(question=question, answer=answer, analysis=analysis))
+#         return analysis
+
+#     def aggregate_scores(self) -> Dict[str, float]:
+#         buckets = {"humility": [], "learning": []}
+#         for t in self.analysis.turns:
+#             s = t.analysis["scores"]
+#             buckets["humility"].append(s["humility"])
+#             buckets["learning"].append(s["learning"])
+#         self.analysis.overall_scores = {
+#             "humility": round(sum(buckets["humility"]) / max(1, len(buckets["humility"])), 1),
+#             "learning": round(sum(buckets["learning"]) / max(1, len(buckets["learning"])), 1),
+#         }
+#         return self.analysis.overall_scores
+
+#     def build_per_turn_blocks(self) -> List[Dict[str, Any]]:
+#         rows = []
+#         for idx, t in enumerate(self.analysis.turns, 1):
+#             rows.append({
+#                 "index": idx,
+#                 "question": t.question,
+#                 "answer": t.answer,
+#                 "scores": t.analysis["scores"],      # humility (8-agent avg), learning
+#                 "evidence": t.analysis["evidence"],
+#                 "feedback_text": t.analysis["feedback_text"]
+#             })
+#         return rows
+
+#     def to_summary_payload(self) -> Dict[str, Any]:
+#         return {
+#             "candidate_name": self.candidate_name,
+#             "generated_at": self.analysis.date,
+#             "overall_scores": self.aggregate_scores(),
+#             "turns": self.build_per_turn_blocks(),
+#         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+###dopher 1 #kaam kar raha hai
 # interview_analyzer.py
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any
+import inspect
 
-from backend.agent_manager import run_analysis_pipeline  # <-- use LLM agents
-from backend.agents.humility_agent import analyze_humility  # keep if you want to compare/retain
+from backend.agent_manager import run_all_agents
+from backend.agents.humility_agent import analyze_humility
 from backend.agents.learning_agent import analyze_learning
-from backend.agents.feedback_agent import analyze_feedback  # text only
+from backend.agents.feedback_agent import analyze_feedback  # async in your codebase
 
-# Map normalized names for selection
-EIGHT_HUMILITY_AGENTS = {
-    "admitmistake", "mindchange", "learnermindset",
-    "bragflag", "blameshift", "knowitall",
-    "feedbackacceptance", "supportgrowth"
+EIGHT_HUMILITY_NAMES = {
+    "AdmitMistake",
+    "MindChange",
+    "LearnerMindset",
+    "BragFlag",
+    "BlameShift",
+    "KnowItAll",
+    "FeedbackAcceptance",
+    "SupportGrowth",
 }
 
-def _base_name(agent_name: str) -> str:
-    n = (agent_name or "").lower()
-    if n.endswith("agent"):
-        n = n[:-5]
-    return n
+async def _maybe_await(func, *args, **kwargs):
+    if inspect.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    return func(*args, **kwargs)
 
 @dataclass
 class InterviewTurn:
@@ -1025,51 +1169,44 @@ class InterviewAnalyzer:
             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
 
-    async def _llm_8agent_avg(self, text: str) -> float:
+    async def _humility_8agent_avg(self, text: str) -> float:
         """
-        Run LLM agents on a single answer and average the specified 8 agents only.
-        No inversion, no PraiseHandling.
+        Fast, dependency-free: use backend.agent_manager.run_all_agents on this answer,
+        keep the 8 humility factors, convert to 0..10 and average.
         """
-        try:
-            results = await run_analysis_pipeline(text)  # list of dicts or AgentScore-like
-        except Exception:
-            results = []
-
+        results = run_all_agents(text or "")
         vals = []
         for r in results:
-            name = getattr(r, "agent_name", None) or r.get("agent_name", "")
-            base = _base_name(name)
-            if base in EIGHT_HUMILITY_AGENTS:
-                try:
-                    vals.append(float(getattr(r, "score", None) if hasattr(r, "score") else r.get("score", 0)))
-                except Exception:
-                    pass
-
+            if r.agent in EIGHT_HUMILITY_NAMES:
+                score10 = (r.score * 10.0) if r.score <= 1.0 else (r.score / 10.0)
+                vals.append(float(score10))
         return round(sum(vals) / len(vals), 1) if vals else 0.0
 
     async def analyze_response(self, question: str, answer: str) -> Dict[str, Any]:
         if not answer.strip():
             return {"error": "Empty answer provided for analysis"}
 
-        # Per-question humility from the 8 LLM agents:
-        hum_8 = await self._llm_8agent_avg(answer)
+        # (1) Per-question humility (8 factors)
+        hum_8 = await self._humility_8agent_avg(answer)
 
-        # Learning via parser:
-        lrn_score, lrn_ev = await analyze_learning(answer)
+        # (2) Learning (sync/async safe)
+        lrn_score, lrn_ev = await _maybe_await(analyze_learning, answer)
 
-        # Optional: keep parser humility evidence for transparency (not scored):
-        _, hum_ev_parser = await analyze_humility(answer)
+        # (3) Parser notes on humility tone (sync/async safe)
+        _, hum_ev_parser = await _maybe_await(analyze_humility, answer)
 
-        # Per-question feedback text:
-        fb_text = await analyze_feedback(answer)
+        # (4) Per-question feedback text (async in your code)
+        fb_text = await _maybe_await(analyze_feedback, answer)
 
         analysis = {
             "scores": {"humility": float(hum_8), "learning": float(lrn_score)},
             "evidence": {
-                "humility": f"Computed as avg of 8 agents: {', '.join(sorted(a.title() for a in EIGHT_HUMILITY_AGENTS))}. Parser notes: {hum_ev_parser}",
-                "learning": lrn_ev
+                "humility": "Computed as avg of 8 agents: AdmitMistake, MindChange, LearnerMindset, "
+                            "BragFlag, BlameShift, KnowItAll, FeedbackAcceptance, SupportGrowth. "
+                            f"Parser notes: {hum_ev_parser}",
+                "learning": lrn_ev,
             },
-            "feedback_text": fb_text
+            "feedback_text": fb_text,
         }
         self.analysis.turns.append(InterviewTurn(question=question, answer=answer, analysis=analysis))
         return analysis
@@ -1093,9 +1230,9 @@ class InterviewAnalyzer:
                 "index": idx,
                 "question": t.question,
                 "answer": t.answer,
-                "scores": t.analysis["scores"],      # humility (8-agent avg), learning
+                "scores": t.analysis["scores"],
                 "evidence": t.analysis["evidence"],
-                "feedback_text": t.analysis["feedback_text"]
+                "feedback_text": t.analysis["feedback_text"],
             })
         return rows
 
@@ -1106,3 +1243,4 @@ class InterviewAnalyzer:
             "overall_scores": self.aggregate_scores(),
             "turns": self.build_per_turn_blocks(),
         }
+
